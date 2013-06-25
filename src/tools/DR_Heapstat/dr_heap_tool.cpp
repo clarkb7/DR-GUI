@@ -1,32 +1,41 @@
-/*************************************************************************
-**
+/**************************************************************************
+** Copyright (c) 2013, Branden Clark
+** All rights reserved.
+** 
+** Redistribution and use in source and binary forms, with or without 
+** modification, are permitted provided that the conditions outlined in
+** the COPYRIGHT file are met:
 ** 
 ** File: dr_heap_tool.cpp
 ** 
-** Defines the base of the options window.
-**
+** Provides the DR. Heapstat tool
 **
 *************************************************************************/
+
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGridLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QStringList>
 #include <QPushButton>
 #include <QTextEdit>
+#include <QLabel>
 #include <QTableWidget>
 #include <QFileDialog>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QHeaderView>
-#include <QTextStream>
 #include <QDebug>
 
+#include <cmath>
 #include <cassert>
 
 #include "dr_heap_tool.h"
+#include "dr_heap_graph.h"
 
+/* Public
+   Constructor
+*/
 DR_Heapstat::DR_Heapstat() {
     qDebug() << "INFO: Entering DR_Heapstat::DR_Heapstat()";
     logDirTextChanged = false;
@@ -37,10 +46,16 @@ DR_Heapstat::DR_Heapstat() {
 
 }
 
+/* Private
+   Creates and connects GUI Actions
+*/
 void DR_Heapstat::createActions() {
     qDebug() << "INFO: Entering DR_Heapstat::createActions()";
 }
 
+/* Private
+   Creates and connects the GUI
+*/
 void DR_Heapstat::createLayout() {
     qDebug() << "INFO: Entering DR_Heapstat::createLayout()";
     QGridLayout *mainLayout = new QGridLayout;
@@ -51,7 +66,6 @@ void DR_Heapstat::createLayout() {
     connect(logDirLineEdit, SIGNAL(textEdited(const QString &)), 
             this, SLOT(logDirTextChangedSlot()));
     controlsLayout->addWidget(logDirLineEdit);
-    //controlsLayout->setAlignment(logDirLineEdit, Qt::AlignHCenter);
     /* load button */
     loadResultsButton = new QPushButton("Load Results");
     connect(loadResultsButton, SIGNAL(clicked()), 
@@ -59,30 +73,31 @@ void DR_Heapstat::createLayout() {
     controlsLayout->addWidget(loadResultsButton);
     controlsLayout->setAlignment(loadResultsButton,Qt::AlignLeft);
 
-
-
     mainLayout->addLayout(controlsLayout,0,0,1,2);
 
-    /* Make the Graph (left side) */
-    graphView = new QGraphicsView;
-    graphScene = new QGraphicsScene;
-    
-    graphView->setBackgroundBrush(QBrush(Qt::red));
-    graphView->setSceneRect(0,0,100,100);
-    graphView->setScene(graphScene);
-    /* y axis */
-    graphScene->addLine(0,100,0,0, QPen(Qt::black));
-    /* x axis */
-    graphScene->addLine(0,100,100,100, QPen(Qt::black));
-    graphView->setScene(graphScene);
-
-    QGridLayout *leftSide = new QGridLayout;
-    leftSide->addWidget(graphView,0,0,1,2);
+    /* Left side) */
+    leftSide = new QGridLayout;
+    /* Graph */
+    QLabel*graphTitle = new QLabel(QString(tr("Memory consumption over "
+                                "full process lifetime")));
+    leftSide->addWidget(graphTitle,0,0);
+    snapshotGraph = new DR_Heapstat_Graph(NULL);
+    leftSide->addWidget(snapshotGraph,1,0);
+    /* messages box */
     QTextEdit *messages = new QTextEdit;
-    mainLayout->addWidget(messages,2,0);
+    QLabel *msgTitle = new QLabel(QString(tr("Messages")));
+    QVBoxLayout *msgLayout = new QVBoxLayout;
+    msgLayout->addWidget(msgTitle,0);
+    msgLayout->addWidget(messages,1);
+    leftSide->addLayout(msgLayout,2,0);
+    leftSide->setRowStretch(1,5);
+    leftSide->setRowStretch(2,2);
     
     /* right side */
     QGridLayout *rightSide = new QGridLayout;
+    QLabel *rightTitle = new QLabel(QString(tr("Memory consumption at "
+                             "a given point: Individual callstacks")));
+    rightSide->addWidget(rightTitle,0,0);
     /* Set up callstack table*/
     callstacksTable = new QTableWidget;
     callstacksTable->setColumnCount(5);
@@ -99,26 +114,33 @@ void DR_Heapstat::createLayout() {
     callstacksTable->verticalHeader()->hide();
     connect(callstacksTable, SIGNAL(currentCellChanged(int,int,int,int)),
             this, SLOT(loadFramesTextEdit(int,int,int,int)));
-    rightSide->addWidget(callstacksTable,0,0);
+    rightSide->addWidget(callstacksTable,1,0);
+    /* Mid frame frameButtons */
     QHBoxLayout *frameButtons = new QHBoxLayout;
     prevFrameButton = new QPushButton("Prev Frames");
     nextFrameButton = new QPushButton("Next Frames");
     frameButtons->addWidget(prevFrameButton);
     frameButtons->addStretch(1);
     frameButtons->addWidget(nextFrameButton);
-    rightSide->addLayout(frameButtons,1,0);
+    /* frame text box */
+    rightSide->addLayout(frameButtons,3,0);
     framesTextEdit = new QTextEdit;
-    rightSide->addWidget(framesTextEdit,2,0,2,1);
+    rightSide->addWidget(framesTextEdit,4,0);
+    rightSide->setRowStretch(4,3);
 
     mainLayout->addLayout(leftSide,1,0);
+    mainLayout->setColumnStretch(0,3);
     mainLayout->addLayout(rightSide,1,1);
-    
+    mainLayout->setColumnStretch(1,5);
     setLayout(mainLayout);
 }
 
+/* Private Slot
+   Loads log files for analysis
+*/
 void DR_Heapstat::loadResults() {
     qDebug() << "INFO: Entering DR_Heapstat::loadResults()";
-    if (logDirTextChanged) {
+    if (logDirTextChanged) /* enter logDir */{
         QString testDir = logDirLineEdit->text();
         if(dr_checkDir(QDir(testDir))) {
             logDirLoc = testDir;            
@@ -127,26 +149,33 @@ void DR_Heapstat::loadResults() {
             logDirTextChanged = false;
             return;
         }
-    } else /* Select logdir */ {
+    } else /* navigate to logDir */ {
+        QString testDir;
         do {
-        logDirLoc = QFileDialog::getExistingDirectory(this, 
+        testDir = QFileDialog::getExistingDirectory(this, 
                             tr("Open Directory"),
-                            "/home", //FIXME: Use preference
-                            QFileDialog::ShowDirsOnly
-                            | QFileDialog::DontResolveSymlinks);
+                            "/home", //TODO: Use preference
+                            QFileDialog::ShowDirsOnly);
         } while(!dr_checkDir(QDir(logDirLoc)));
+        if(testDir.isEmpty()) {
+            return;
+        }
+        logDirLoc = testDir;
         /* set text box text */
         logDirLineEdit->setText(logDirLoc);
     }
     /* reset logDirTextChanged*/
     logDirTextChanged = false;
 
-
     readLogData();
+    
     /* Select first callstack in table to view in framesTextEdit */
     callstacksTable->setCurrentCell(0,0);
 }
 
+/* Private
+   Reads the logs files
+*/
 void DR_Heapstat::readLogData() {
     qDebug() << "INFO: Entering DR_Heapstat::readLogData()";
     /* Grab and check dir */
@@ -161,7 +190,6 @@ void DR_Heapstat::readLogData() {
        !dr_checkFile(snapshotLog)) {
         return;
     }
-
     /* clear current callstack data*/
     callstacksTable->clearContents();
     callstacksTable->setRowCount(0);
@@ -180,6 +208,7 @@ void DR_Heapstat::readLogData() {
                 line = inLog.readLine();
             } while (!line.contains(QString("CALLSTACK")) && 
                      !line.contains(QString("LOG END")));
+            /* sanity check */
             if(line.contains(QString("LOG END"))) {
                 break;
             }
@@ -189,19 +218,26 @@ void DR_Heapstat::readLogData() {
             /* read in frame data */
             while(!line.isNull()) {
                 line = inLog.readLine();
-                if(line.contains(QString("error end")) || line.isNull()) {
+                if(line.contains(QString("error end")) || 
+                   line.isNull()) {
                     break;
                 }
                 thisCallstack->frameData << line;
     
             }
             callstacks.append(thisCallstack);
-        } while(!line.isNull() && !line.contains(QString("LOG END")));
+        } while(!line.isNull() && 
+                !line.contains(QString("LOG END")));
         callstackLog.close(); 
     }
     qDebug() << "INFO: callstack.log read";
 
     /* Read in snapshot.log data */
+    /* TODO: Make preference to ignore first snapshot
+              It's usually MUCH larger than the rest of the life cycle
+              Won't be necessary when start and finish life-time
+              view sliders are implemented
+    */
     if(snapshotLog.open(QFile::ReadOnly)) {
         QTextStream inLog(&snapshotLog);
         QString line;
@@ -217,6 +253,16 @@ void DR_Heapstat::readLogData() {
             struct snapshotListing* thisSnapshot = new snapshotListing;
             thisSnapshot->snapshotNum = counter;
             counter++;
+            /* get num ticks */
+            QStringList tmpList = line.split("@").at(1).split(" ");
+            foreach (QString item, tmpList) {
+                bool goodConversion;
+                item.toInt(&goodConversion);
+                if(goodConversion) {
+                    thisSnapshot->numTicks = item.toULong();
+                    break;
+                }
+            }
             do /* skip past any extra info */ {
                 line = inLog.readLine();
             } while (!line.contains(QString("total: ")));
@@ -227,14 +273,12 @@ void DR_Heapstat::readLogData() {
             thisSnapshot->tot_bytes_asked_for = totalMemData.at(1).toInt();
             thisSnapshot->tot_bytes_usable = totalMemData.at(2).toInt();
             thisSnapshot->tot_bytes_occupied = totalMemData.at(3).toInt();
-    
-            for( int i = 0; i < thisSnapshot->tot_mallocs; ++i) {
+            /* Add new data to callstacks */
+            for( unsigned int i = 0; i < thisSnapshot->tot_mallocs; ++i) {
                 line = inLog.readLine();
                 QStringList callstackMemData = line.split(",");
                 struct callstackListing* thisCallstack 
                         = callstacks.at(callstackMemData.at(0).toInt()-1);
-                assert(thisCallstack->callstackNum == 
-                       callstackMemData.at(0).toInt());
                 thisCallstack->instances = callstackMemData.at(1).toInt();
                 thisCallstack->bytes_asked_for = callstackMemData.at(2)
                                                                  .toInt();
@@ -242,17 +286,28 @@ void DR_Heapstat::readLogData() {
                                                               .toInt();
                 thisCallstack->extra_occupied = callstackMemData.at(4)
                                                                 .toInt();
+                /* ensure proper counting */
+                int instanceCount = thisCallstack->instances;
+                while(instanceCount > 1) { 
+                    i++;
+                    instanceCount--;
+                }
             }
             snapshots.append(thisSnapshot);
-        } while(!line.isNull() && !line.contains(QString("LOG END")));
+        } while(!line.isNull() && 
+                !line.contains(QString("LOG END")));
         snapshotLog.close();
     }
     qDebug() << "INFO: snapshot.log read";
 
     fillCallstacksTable();
-    //drawSnapshotGraph();
+    drawSnapshotGraph();
 }
 
+/* Private Slot
+   Fills callstacksTable with gathered data
+*/
+/* TODO fill in more data, have it be specific to snapshot*/
 void DR_Heapstat::fillCallstacksTable() {
     qDebug() << "INFO: Entering DR_Heapstat::fillCallstackTable()";
 
@@ -265,72 +320,118 @@ void DR_Heapstat::fillCallstacksTable() {
     }
 }
 
+/* Public
+   Returns provided tool-names during loading
+*/
 QStringList DR_Heapstat::toolNames() const {
     qDebug() << "INFO: Entering DR_Heapstat::toolNames()";
-	return QStringList() << "DR_Heapstat";
+    return QStringList() << "DR_Heapstat";
 }
 
+/* Public
+   Returns a new instance of the tool
+*/
 DR_Heapstat *DR_Heapstat::createInstance() {
     qDebug() << "INFO: Entering DR_Heapstat::createInstance()";
     return new DR_Heapstat;
 }
 
+/* Private Slot
+   Returns provided tool-names during loading
+*/
 void DR_Heapstat::logDirTextChangedSlot() {
     qDebug() << "INFO: Entering DR_Heapstat::logDirTextChangedSlot()";
     logDirTextChanged = true;
 }
 
+/* Private Slot
+   Loads preferences data
+*/
 void DR_Heapstat::loadSettings() {
     qDebug() << "INFO: Entering DR_Heapstat::loadSettings()";
 }
 
+/* Private
+   Checks validity of directories
+*/
 bool DR_Heapstat::dr_checkDir(QDir dir) {
     qDebug() << "INFO: Entering DR_Heapstat::dr_checkDir(QDir dir)";
+    QString errorMsg = "\'"; errorMsg += dir.canonicalPath() += "\'<br>";
+    bool retVal = true;
+
     if(!dir.exists() || !dir.isReadable()) {   
-        QString tmpLoc(dir.canonicalPath());        
-        tmpLoc.prepend('\'');
-        tmpLoc.append(tr("\'<br> is an invalid directory."));
-        QMessageBox msgBox(QMessageBox::Warning, 
-                        tr("QMessageBox::warning()"),
-                   tmpLoc, 0, this);
-        msgBox.exec();
-        qDebug() << "WARNING: Failed to open directory: " << tmpLoc;
-        return false;
+        qDebug() << "WARNING: Failed to open directory: " 
+                 << dir.canonicalPath();
+        errorMsg += "is an invalid directory<br>";
+        retVal = false;
     }
-    return true;
-}
-bool DR_Heapstat::dr_checkFile(QFile& file) {
-    qDebug() << "INFO: Entering DR_Heapstat::dr_checkFile(QFile& file)";
-    if(!file.exists()) {   
-        QString tmpLoc(file.fileName());        
-        tmpLoc.prepend('\'');
-        tmpLoc.append(tr("\'<br> cannot open the file."));
+    if(!retVal) {
         QMessageBox msgBox(QMessageBox::Warning, 
-                        tr("QMessageBox::warning()"),
-                   tmpLoc, 0, this);
+                           tr("Invalid Directory"),
+                           errorMsg, 0, this);
         msgBox.exec();
-        qDebug() << "WARNING: Failed to open file: " << tmpLoc;
-        return false;
     }
-    return true;
+    return retVal;
 }
 
+/* Private
+   Checks validity of directories
+*/
+bool DR_Heapstat::dr_checkFile(QFile& file) {
+    qDebug() << "INFO: Entering DR_Heapstat::dr_checkFile(QFile& file)";
+    QString errorMsg = "\'"; errorMsg += file.fileName() += "\'<br>";
+    bool retVal = true;
+
+    if(!file.exists()) {   
+        qDebug() << "WARNING: Failed to open file: " 
+                 << file.fileName();
+        errorMsg += "File does not exist<br>";
+        retVal = false;
+    } 
+    if(!retVal) {
+        QMessageBox msgBox(QMessageBox::Warning, 
+                           tr("Invalid File"),
+                           errorMsg, 0, this);
+        msgBox.exec();
+    }
+    
+    return retVal;
+}
+
+/* Private Slot
+   Loads frame data into framesTextEdit for requested callstack
+*/
 void DR_Heapstat::loadFramesTextEdit(int currentRow, int currentColumn, 
                                      int previousRow, int previousColumn) {
     qDebug() << "INFO: Entering R_Heapstat::loadFramesTextEdit("
-             << "int currentRow, int currentColumn, int previousRow, "
-             << "int previousColumn)";
+                "int currentRow, int currentColumn, int previousRow, "
+                "int previousColumn)";
     if (((currentRow != previousRow) ||
          (currentColumn != previousColumn)) && 
          callstacksTable->selectedItems().size() != 0) {
         framesTextEdit->clear();
-        int callstackNum = callstacksTable->item(currentRow,0)
-                                          ->data(Qt::DisplayRole)
-                                          .toInt()-1;
-        QStringList frames = callstacks.at(callstackNum)->frameData;
+        int callstackIndex = callstacksTable->item(currentRow,0)
+                                            ->data(Qt::DisplayRole)
+                                            .toInt()-1;
+        QStringList frames = callstacks.at(callstackIndex)->frameData;
+        framesTextEdit->insertPlainText(QString(tr("Callstack #")));
+        framesTextEdit->insertPlainText(QString::number(callstackIndex+1));
+        framesTextEdit->insertHtml(QString("<br>"));
+        /* Add frame data */
         foreach (const QString frame, frames) {
-            framesTextEdit->insertPlainText(frame);
             framesTextEdit->insertHtml(QString("<br>"));
+            framesTextEdit->insertPlainText(frame);            
         }
     }
+}
+
+/* Private Slot
+   Handles creation/deletion of the graph
+*/
+void DR_Heapstat::drawSnapshotGraph() {
+    qDebug() << "INFO: Entering DR_Heapstat::drawSnapshotGraph()";
+    leftSide->removeWidget(snapshotGraph);
+    delete snapshotGraph;
+    snapshotGraph = new DR_Heapstat_Graph(&snapshots);
+    leftSide->addWidget(snapshotGraph,1,0);
 }

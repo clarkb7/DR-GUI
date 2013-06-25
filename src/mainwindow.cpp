@@ -1,25 +1,33 @@
 /**************************************************************************
-**
+** Copyright (c) 2013, Branden Clark
+** All rights reserved.
+** 
+** Redistribution and use in source and binary forms, with or without 
+** modification, are permitted provided that the conditions outlined in
+** the COPYRIGHT file are met:
 ** 
 ** File: mainwindow.cpp
 ** 
 ** Provides a main structure for users to interface with tools.
 **
-**
 **************************************************************************/
+
 #include <QtWidgets>
 #include <QActionGroup>
 
 #include "mainwindow.h"
 #include "tools/toolbase.h"
 
+/* Public
+   Constructor, everything begins here
+*/
 MainWindow::MainWindow() {
     windowMapper = new QSignalMapper(this);
     tabArea = new QTabWidget;
     tabArea->setTabsClosable(true);
     tabArea->setMovable(true);
     connect(tabArea, SIGNAL(tabCloseRequested(int)),
-        this, SLOT(maybeClose(int)));
+            this, SLOT(maybeClose(int)));
     setCentralWidget(tabArea);
     
     connect(tabArea, SIGNAL(currentChanged(int)),
@@ -119,7 +127,8 @@ void MainWindow::createActions() {
     exitAct = new QAction(tr("E&xit"), this);
     exitAct->setShortcuts(QKeySequence::Quit);
     exitAct->setStatusTip(tr("Exit the application"));
-    connect(exitAct, SIGNAL(triggered()), qApp, SLOT(closeAllWindows()));
+    connect(exitAct, SIGNAL(triggered()), 
+            qApp, SLOT(closeAllWindows()));
 
     /* Edit */
     preferencesAct = new QAction(tr("&Preferences"), this);
@@ -154,11 +163,13 @@ void MainWindow::createActions() {
     /* Help */
     aboutAct = new QAction(tr("&About"), this);
     aboutAct->setStatusTip(tr("Show the application's About box"));
-    connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
+    connect(aboutAct, SIGNAL(triggered()), 
+            this, SLOT(about()));
 
     aboutQtAct = new QAction(tr("About &Qt"), this);
     aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
-    connect(aboutQtAct, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+    connect(aboutQtAct, SIGNAL(triggered()), 
+            qApp, SLOT(aboutQt()));
 
     /* Tools */
     toolActionGroup = new QActionGroup(this);
@@ -269,10 +280,10 @@ void MainWindow::maybeCloseMe() {
 void MainWindow::maybeClose(int index) {
     QMessageBox::StandardButton ret;
     ret = QMessageBox::warning(this, tr("Confirm"),
-                 tr("Are you sure you want to close '%1'?")
-                 .arg(tabArea->tabText(index)),
-                 QMessageBox::Yes | QMessageBox::No
-                 | QMessageBox::Cancel);
+                    tr("Are you sure you want to close '%1'?")
+                        .arg(tabArea->tabText(index)),
+                    QMessageBox::Yes | QMessageBox::No |
+                    QMessageBox::Cancel);
     if (ret == QMessageBox::Yes)
         hideTab(index);
 }
@@ -311,16 +322,11 @@ void MainWindow::loadTools()
 {
     pluginsDir = QDir(qApp->applicationDirPath());
 
-#if defined(Q_OS_WIN)
-    if (pluginsDir.dirName().toLower() == "debug" || pluginsDir.dirName().toLower() == "release")
-        pluginsDir.cdUp();
-#elif defined(Q_OS_MAC)
-    if (pluginsDir.dirName() == "MacOS") {
-        pluginsDir.cdUp();
-        pluginsDir.cdUp();
-        pluginsDir.cdUp();
-    }
-#endif
+    #if defined(Q_OS_WIN)
+        /*  TODO */
+    #elif defined(Q_OS_MAC)
+        /* TODO */
+    #endif
     pluginsDir.cd("tools");
 
     foreach (QString fileName, pluginsDir.entryList(QDir::Files)) {
@@ -360,10 +366,9 @@ void MainWindow::addToMenu(QObject *plugin, const QStringList &texts,
 */
 void MainWindow::addTab() {
     QAction *action = qobject_cast<QAction *>(sender());
-    ToolBase *tool = qobject_cast<ToolBase *>(
-                       qobject_cast<ToolInterface *>(
-                         action->parent())
-                       ->createInstance());
+    ToolBase *tool = qobject_cast<ToolBase *>
+                       (qobject_cast<ToolInterface *>
+                         (action->parent())->createInstance());
     const QString toolName = action->text();
 
     tabArea->addTab(tool, toolName);

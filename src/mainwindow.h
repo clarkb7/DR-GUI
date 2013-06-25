@@ -1,10 +1,14 @@
 /**************************************************************************
-**
+** Copyright (c) 2013, Branden Clark
+** All rights reserved.
+** 
+** Redistribution and use in source and binary forms, with or without 
+** modification, are permitted provided that the conditions outlined in
+** the COPYRIGHT file are met:
 ** 
 ** File: mainwindow.h
 ** 
 ** Defines a main structure for users to interface with tools.
-**
 **
 **************************************************************************/
 
@@ -61,6 +65,7 @@ private:
                            QMenu *menu, const char *member,
                            QActionGroup *actionGroup);
 
+    /* GUI */
     QDir pluginsDir;
     QStringList pluginFileNames;
     QTabWidget *tabArea;

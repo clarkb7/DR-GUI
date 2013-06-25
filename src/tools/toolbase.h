@@ -1,11 +1,16 @@
 /**************************************************************************
-**
+** Copyright (c) 2013, Branden Clark
+** All rights reserved.
+** 
+** Redistribution and use in source and binary forms, with or without 
+** modification, are permitted provided that the conditions outlined in
+** the COPYRIGHT file are met:
 ** 
 ** File: toolbase.h
 ** 
-** Defines a structure through which tools will interface with the mainwindow
+** Defines the structures through which tools will interface with the
+** mainwindow
 ** Anything needed by most or all tools should be defined here.
-**
 **
 **************************************************************************/
 
@@ -16,7 +21,6 @@
 #include <QtPlugin>
 
 class QMenu;
-
 
 class ToolBase : public QWidget
 {
@@ -32,8 +36,6 @@ public:
 protected:
     void closeEvent(QCloseEvent *event);
 
-private slots:
-
 private:
     void setCurrentFile(const QString &fileName);
     QString strippedName(const QString &fullFileName);
@@ -41,6 +43,7 @@ private:
     QString curFile;
     bool isUntitled;
 };
+
 #endif
 
 #ifndef TOOLINTERFACE_H
