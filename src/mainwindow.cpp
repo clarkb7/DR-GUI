@@ -373,4 +373,3 @@ void MainWindow::addTab() {
 
     tabArea->addTab(tool, toolName);
 }
-

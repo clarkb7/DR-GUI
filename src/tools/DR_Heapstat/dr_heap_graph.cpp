@@ -13,6 +13,7 @@
 *************************************************************************/
 
 #define GRAPH_MARK_WIDTH 3
+
 #include <QWidget>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>

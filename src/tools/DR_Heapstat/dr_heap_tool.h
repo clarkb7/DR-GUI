@@ -12,6 +12,9 @@
 **
 *************************************************************************/
 
+#ifndef DR_HEAP_TOOL_H
+#define DR_HEAP_TOOL_H
+
 #include "tools/toolbase.h"
 
 class QGraphicsView;
@@ -92,3 +95,5 @@ private:
     QVector<struct callstackListing*> callstacks;
     QVector<struct snapshotListing*> snapshots;
 };
+
+#endif

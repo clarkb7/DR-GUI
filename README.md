@@ -2,10 +2,12 @@ Copyright (c) 2013, Branden Clark
 All rights reserved.
 
 =================         IMPORTANT         =================
+
 See COPYRIGHT for license details.
 
 
 =================         Purpose         =================
+
 To provide a GUI for Dynamorio and it's extensions.
 Currently in progress:
 --Dr. Memory
@@ -13,6 +15,7 @@ Currently in progress:
 
 
 =================         Building         =================
+
 --download the source
 --create a build directory (in or out of source)
 --build the plugins you want (from the build dir)
@@ -28,6 +31,7 @@ Currently in progress:
 
 
 =================         USING         =================
+
 To load a tool look in the 'tools' menu.
 For information on a specific tool check their docs.
 

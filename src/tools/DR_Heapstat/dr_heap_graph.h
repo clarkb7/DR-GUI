@@ -12,6 +12,9 @@
 **
 *************************************************************************/
 
+#ifndef DR_HEAP_GRAPH_H
+#define DR_HEAP_GRAPH_H
+
 class QWidget;
 
 class DR_Heapstat_Graph : public QWidget {
@@ -39,3 +42,5 @@ private:
     qreal textHeight;
     /* TODO make max vars, func expensive*/
 };
+
+#endif
