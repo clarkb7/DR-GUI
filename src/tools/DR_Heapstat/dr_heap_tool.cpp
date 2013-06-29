@@ -26,6 +26,7 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QDebug>
+#include <QCheckBox>
 
 #include <cmath>
 #include <cassert>
@@ -34,404 +35,545 @@
 #include "dr_heap_graph.h"
 
 /* Public
-   Constructor
-*/
-DR_Heapstat::DR_Heapstat() {
-    qDebug() << "INFO: Entering DR_Heapstat::DR_Heapstat()";
-    logDirTextChanged = false;
-    logDirLoc = "";
-    loadSettings();
-    createActions();
-    createLayout();
+ * Constructor
+ */
+dr_heapstat_t::dr_heapstat_t(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::dr_heapstat_t(void)";
+    log_dir_text_changed = false;
+    log_dir_loc = "";
+    load_settings();
+    create_actions();
+    create_layout();
+}
 
+/* Public
+ * Destructor
+ */
+dr_heapstat_t::~dr_heapstat_t(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::~dr_heapstat_t(void)";
+    snapshots.clear();
+    callstacks.clear();
+    delete snapshot_graph;
 }
 
 /* Private
-   Creates and connects GUI Actions
-*/
-void DR_Heapstat::createActions() {
-    qDebug() << "INFO: Entering DR_Heapstat::createActions()";
+ * Creates and connects GUI Actions
+ */
+void 
+dr_heapstat_t::create_actions(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::create_actions(void)";
 }
 
 /* Private
-   Creates and connects the GUI
-*/
-void DR_Heapstat::createLayout() {
-    qDebug() << "INFO: Entering DR_Heapstat::createLayout()";
-    QGridLayout *mainLayout = new QGridLayout;
+ * Creates and connects the GUI
+ */
+void 
+dr_heapstat_t::create_layout(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::create_layout(void)";
+    QGridLayout *main_layout = new QGridLayout;
     /* Controls (top) */
-    QHBoxLayout *controlsLayout = new QHBoxLayout;
+    QHBoxLayout *controls_layout = new QHBoxLayout;
     /* logdir textbox */
-    logDirLineEdit = new QLineEdit();
-    connect(logDirLineEdit, SIGNAL(textEdited(const QString &)), 
-            this, SLOT(logDirTextChangedSlot()));
-    controlsLayout->addWidget(logDirLineEdit);
+    log_dir_line_edit = new QLineEdit(this);
+    connect(log_dir_line_edit, SIGNAL(textEdited(const QString &)), 
+            this, SLOT(log_dir_text_changed_slot()));
+    controls_layout->addWidget(log_dir_line_edit);
     /* load button */
-    loadResultsButton = new QPushButton("Load Results");
-    connect(loadResultsButton, SIGNAL(clicked()), 
-            this, SLOT(loadResults()));
-    controlsLayout->addWidget(loadResultsButton);
-    controlsLayout->setAlignment(loadResultsButton,Qt::AlignLeft);
+    load_results_button = new QPushButton("Load Results", this);
+    connect(load_results_button, SIGNAL(clicked()), 
+            this, SLOT(load_results()));
+    controls_layout->addWidget(load_results_button);
+    controls_layout->setAlignment(load_results_button,Qt::AlignLeft);
 
-    mainLayout->addLayout(controlsLayout,0,0,1,2);
+    main_layout->addLayout(controls_layout,0,0,1,2);
 
     /* Left side) */
-    leftSide = new QGridLayout;
+    left_side = new QGridLayout;
     /* Graph */
-    QLabel*graphTitle = new QLabel(QString(tr("Memory consumption over "
-                                "full process lifetime")));
-    leftSide->addWidget(graphTitle,0,0);
-    snapshotGraph = new DR_Heapstat_Graph(NULL);
-    leftSide->addWidget(snapshotGraph,1,0);
+    QLabel *graph_title = new QLabel(QString(tr("Memory consumption over "
+                                "full process lifetime")), this);
+    left_side->addWidget(graph_title,0,0);
+    snapshot_graph = new dr_heapstat_graph_t(NULL);
+    left_side->addWidget(snapshot_graph,1,0);
+    /* zoom reset button */
+    reset_graph_zoom_button = new QPushButton("Reset Graph Zoom");
+    left_side->addWidget(reset_graph_zoom_button,2,0);
+    /* line check boxes */
+    QVBoxLayout *check_box_layout = new QVBoxLayout;
+    QCheckBox *mem_alloc_check_box = new QCheckBox(tr("Memory allocated ("
+                                                      "requested) by process"),
+                                                   this);
+    QCheckBox *padding_check_box = new QCheckBox(tr("Memory allocated by "
+                                                    "process + Padding"),
+                                                 this);
+    QCheckBox *headers_check_box = new QCheckBox(tr("Memory allocated by "
+                                                    "process + Padding "
+                                                    "+ Heap headers"),
+                                                 this);
+    /* Start Checked */
+    mem_alloc_check_box->setCheckState(Qt::Checked);
+    padding_check_box->setCheckState(Qt::Checked);
+    headers_check_box->setCheckState(Qt::Checked);
+    connect(mem_alloc_check_box, SIGNAL(stateChanged(int)),
+            this, SLOT(change_lines()));
+    connect(padding_check_box, SIGNAL(stateChanged(int)),
+            this, SLOT(change_lines()));
+    connect(headers_check_box, SIGNAL(stateChanged(int)),
+            this, SLOT(change_lines()));
+    check_box_layout->addWidget(mem_alloc_check_box);
+    check_box_layout->addWidget(padding_check_box);
+    check_box_layout->addWidget(headers_check_box);
+    left_side->addLayout(check_box_layout,3,0);
     /* messages box */
-    QTextEdit *messages = new QTextEdit;
-    QLabel *msgTitle = new QLabel(QString(tr("Messages")));
-    QVBoxLayout *msgLayout = new QVBoxLayout;
-    msgLayout->addWidget(msgTitle,0);
-    msgLayout->addWidget(messages,1);
-    leftSide->addLayout(msgLayout,2,0);
-    leftSide->setRowStretch(1,5);
-    leftSide->setRowStretch(2,2);
-    
-    /* right side */
-    QGridLayout *rightSide = new QGridLayout;
-    QLabel *rightTitle = new QLabel(QString(tr("Memory consumption at "
-                             "a given point: Individual callstacks")));
-    rightSide->addWidget(rightTitle,0,0);
-    /* Set up callstack table*/
-    callstacksTable = new QTableWidget;
-    callstacksTable->setColumnCount(5);
-    QStringList tableHeaders;
-    tableHeaders << tr("Call Stack") << tr("Symbol") 
-                 << tr("Memory Allocated") << tr("+Padding") 
-                 << tr("+Headers");
-    callstacksTable->setHorizontalHeaderLabels(tableHeaders);
-    callstacksTable->setSortingEnabled(true);
-    callstacksTable->horizontalHeader()->setStretchLastSection(true);
-    callstacksTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    callstacksTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    callstacksTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    callstacksTable->verticalHeader()->hide();
-    connect(callstacksTable, SIGNAL(currentCellChanged(int,int,int,int)),
-            this, SLOT(loadFramesTextEdit(int,int,int,int)));
-    rightSide->addWidget(callstacksTable,1,0);
-    /* Mid frame frameButtons */
-    QHBoxLayout *frameButtons = new QHBoxLayout;
-    prevFrameButton = new QPushButton("Prev Frames");
-    nextFrameButton = new QPushButton("Next Frames");
-    frameButtons->addWidget(prevFrameButton);
-    frameButtons->addStretch(1);
-    frameButtons->addWidget(nextFrameButton);
-    /* frame text box */
-    rightSide->addLayout(frameButtons,3,0);
-    framesTextEdit = new QTextEdit;
-    rightSide->addWidget(framesTextEdit,4,0);
-    rightSide->setRowStretch(4,3);
+    QTextEdit *messages = new QTextEdit(this);
+    QLabel *msg_title = new QLabel(QString(tr("Messages")), this);
+    QVBoxLayout *msg_layout = new QVBoxLayout;
+    msg_layout->addWidget(msg_title,0);
+    msg_layout->addWidget(messages,1);
+    left_side->addLayout(msg_layout,4,0);
+    left_side->setRowStretch(1,5);
+    left_side->setRowStretch(3,2);
+    left_side->setRowStretch(4,2);
 
-    mainLayout->addLayout(leftSide,1,0);
-    mainLayout->setColumnStretch(0,3);
-    mainLayout->addLayout(rightSide,1,1);
-    mainLayout->setColumnStretch(1,5);
-    setLayout(mainLayout);
+    /* right side */
+    QGridLayout *right_side = new QGridLayout;
+    QLabel *right_title = new QLabel(QString(tr("Memory consumption at "
+                                                "a given point: Individual "
+                                                "callstacks")),
+                                    this);
+    right_side->addWidget(right_title,0,0);
+    /* Set up callstack table*/
+    callstacks_table = new QTableWidget(this);
+    connect(callstacks_table, SIGNAL(currentCellChanged(int,int,int,int)),
+            this, SLOT(load_frames_text_edit(int,int,int,int)));
+    right_side->addWidget(callstacks_table,1,0);
+    /* Mid frame frameButtons */
+    QHBoxLayout *frame_buttons = new QHBoxLayout;
+    prev_frame_button = new QPushButton("Prev Frames", this);
+    next_frame_button = new QPushButton("Next Frames", this);
+    frame_buttons->addWidget(prev_frame_button);
+    frame_buttons->addStretch(1);
+    frame_buttons->addWidget(next_frame_button);
+    /* frame text box */
+    right_side->addLayout(frame_buttons,2,0);
+    frames_text_edit = new QTextEdit(this);
+    right_side->addWidget(frames_text_edit,3,0);
+    right_side->setRowStretch(1,3);
+    right_side->setRowStretch(3,5);
+
+    main_layout->addLayout(left_side,1,0);
+    main_layout->setColumnStretch(0,3);
+    main_layout->addLayout(right_side,1,1);
+    main_layout->setColumnStretch(1,5);
+    setLayout(main_layout);
 }
 
 /* Private Slot
-   Loads log files for analysis
-*/
-void DR_Heapstat::loadResults() {
-    qDebug() << "INFO: Entering DR_Heapstat::loadResults()";
-    if (logDirTextChanged) /* enter logDir */{
-        QString testDir = logDirLineEdit->text();
-        if(dr_checkDir(QDir(testDir))) {
-            logDirLoc = testDir;            
+ * Loads log files for analysis
+ */
+void 
+dr_heapstat_t::load_results(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::load_results(void)";
+    if (log_dir_text_changed == true) /* enter log_dir */{
+        QString test_dir = log_dir_line_edit->text();
+        if (dr_check_dir(QDir(test_dir)) == true) {
+            log_dir_loc = test_dir;            
         } else {
-            /* reset logDirTextChanged*/
-            logDirTextChanged = false;
+            /* reset log_dir_text_changed*/
+            log_dir_text_changed = false;
             return;
         }
-    } else /* navigate to logDir */ {
-        QString testDir;
+    } else /* navigate to log_dir */ {
+        QString test_dir;
         do {
-        testDir = QFileDialog::getExistingDirectory(this, 
+        test_dir = QFileDialog::getExistingDirectory(this, 
                             tr("Open Directory"),
                             "/home", //TODO: Use preference
                             QFileDialog::ShowDirsOnly);
-        } while(!dr_checkDir(QDir(logDirLoc)));
-        if(testDir.isEmpty()) {
+        } while(dr_check_dir(QDir(log_dir_loc)) == false);
+        if (test_dir.isEmpty() == true) {
             return;
         }
-        logDirLoc = testDir;
+        log_dir_loc = test_dir;
         /* set text box text */
-        logDirLineEdit->setText(logDirLoc);
+        log_dir_line_edit->setText(log_dir_loc);
     }
-    /* reset logDirTextChanged*/
-    logDirTextChanged = false;
+    /* reset log_dir_text_changed*/
+    log_dir_text_changed = false;
 
-    readLogData();
+    read_log_data();
     
-    /* Select first callstack in table to view in framesTextEdit */
-    callstacksTable->setCurrentCell(0,0);
+    /* Select first callstack in table to view in frames_text_edit */
+    callstacks_table->setCurrentCell(0,0);
 }
 
 /* Private
-   Reads the logs files
-*/
-void DR_Heapstat::readLogData() {
-    qDebug() << "INFO: Entering DR_Heapstat::readLogData()";
+ * Reads the logs files
+ */
+void 
+dr_heapstat_t::read_log_data(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::read_log_data(void)";
     /* Grab and check dir */
-    QDir dr_logDir(logDirLoc);
-    if(!dr_checkDir(dr_logDir)) {
+    QDir dr_log_dir(log_dir_loc);
+    if (dr_check_dir(dr_log_dir) == false) {
         return;
     }
     /* find log files */
-    QFile snapshotLog(dr_logDir.absoluteFilePath("snapshot.log"));
-    QFile callstackLog(dr_logDir.absoluteFilePath("callstack.log"));
-    if(!dr_checkFile(callstackLog) ||
-       !dr_checkFile(snapshotLog)) {
+    QFile snapshot_log(dr_log_dir.absoluteFilePath("snapshot.log"));
+    QFile callstack_log(dr_log_dir.absoluteFilePath("callstack.log"));
+    if (dr_check_file(callstack_log) == false ||
+        dr_check_file(snapshot_log) == false) {
         return;
     }
     /* clear current callstack data*/
-    callstacksTable->clearContents();
-    callstacksTable->setRowCount(0);
-    while(callstacks.count() != 0) {
-        struct callstackListing* tmp = callstacks.back();
-        callstacks.pop_back();
-        delete tmp;
-    }
+    callstacks_table->clear();
+    callstacks_table->setRowCount(0);
+    callstacks.clear();
     /* Read in callstack.log data */
-    if(callstackLog.open(QFile::ReadOnly)) {
-        QTextStream inLog(&callstackLog);
+    if (callstack_log.open(QFile::ReadOnly)) {
+        QTextStream in_log(&callstack_log);
         QString line;
         int counter = 1;
         do /* read file */{
             do /* skip past any extra info */ {
-                line = inLog.readLine();
-            } while (!line.contains(QString("CALLSTACK")) && 
-                     !line.contains(QString("LOG END")));
+                line = in_log.readLine();
+            } while (line.contains(QString("CALLSTACK")) == false && 
+                     line.contains(QString("LOG END")) == false);
             /* sanity check */
-            if(line.contains(QString("LOG END"))) {
+            if (line.contains(QString("LOG END")) == true) {
                 break;
             }
-            struct callstackListing* thisCallstack = new callstackListing;
-            thisCallstack->callstackNum = counter;
+            struct callstack_listing *this_callstack = new callstack_listing;
+            this_callstack->callstack_num = counter;
             counter++;
             /* read in frame data */
-            while(!line.isNull()) {
-                line = inLog.readLine();
-                if(line.contains(QString("error end")) || 
-                   line.isNull()) {
+            while(line.isNull() == false) {
+                line = in_log.readLine();
+                if (line.contains(QString("error end")) == true || 
+                    line.isNull() == true) {
                     break;
                 }
-                thisCallstack->frameData << line;
+                this_callstack->frame_data << line;
     
             }
-            callstacks.append(thisCallstack);
-        } while(!line.isNull() && 
-                !line.contains(QString("LOG END")));
-        callstackLog.close(); 
+            callstacks.append(this_callstack);
+        } while(line.isNull() == false && 
+                line.contains(QString("LOG END")) == false);
+        callstack_log.close(); 
     }
     qDebug() << "INFO: callstack.log read";
 
     /* Read in snapshot.log data */
-    /* TODO: Make preference to ignore first snapshot
-              It's usually MUCH larger than the rest of the life cycle
-              Won't be necessary when start and finish life-time
-              view sliders are implemented
+    /* TODO: Make preference to ignore first snapshot (ignored by def now)
+     *        It's usually MUCH larger than the rest of the life cycle
+     *        Won't be necessary when start and finish life-time
+     *        view sliders are implemented
     */
-    if(snapshotLog.open(QFile::ReadOnly)) {
-        QTextStream inLog(&snapshotLog);
+    /* clear current snapshot data*/
+    snapshots.clear();
+    if (snapshot_log.open(QFile::ReadOnly)) {
+        QTextStream in_log(&snapshot_log);
         QString line;
         int counter = 0;
         do /* read file */{
             do /* skip past any extra info */ {
-                line = inLog.readLine();
-            } while (!line.contains(QString("SNAPSHOT #")) && 
-                     !line.contains(QString("LOG END")));
-            if(line.contains(QString("LOG END"))) {
+                line = in_log.readLine();
+            } while (line.contains(QString("SNAPSHOT #")) == false&& 
+                     line.contains(QString("LOG END")) == false);
+            /* sanity check */
+            if (line.contains(QString("LOG END")) == true) {
                 break;
             }
-            struct snapshotListing* thisSnapshot = new snapshotListing;
-            thisSnapshot->snapshotNum = counter;
+            struct snapshot_listing *this_snapshot = new snapshot_listing;
+            this_snapshot->snapshot_num = counter;
             counter++;
             /* get num ticks */
-            QStringList tmpList = line.split("@").at(1).split(" ");
-            foreach (QString item, tmpList) {
-                bool goodConversion;
-                item.toInt(&goodConversion);
-                if(goodConversion) {
-                    thisSnapshot->numTicks = item.toULong();
+            QStringList tmp_list = line.split("@").at(1).split(" ");
+            foreach (QString item, tmp_list) {
+                bool good_conversion = false;
+                item.toULong(&good_conversion);
+                if (good_conversion == true) {
+                    this_snapshot->num_ticks = item.toULong();
                     break;
                 }
             }
             do /* skip past any extra info */ {
-                line = inLog.readLine();
-            } while (!line.contains(QString("total: ")));
+                line = in_log.readLine();
+            } while (line.contains(QString("total: ")) == false);
             /* separate data at commas */
             line.remove(0, 7);
-            QStringList totalMemData = line.split(",");
-            thisSnapshot->tot_mallocs = totalMemData.at(0).toInt();
-            thisSnapshot->tot_bytes_asked_for = totalMemData.at(1).toInt();
-            thisSnapshot->tot_bytes_usable = totalMemData.at(2).toInt();
-            thisSnapshot->tot_bytes_occupied = totalMemData.at(3).toInt();
+            QStringList total_mem_data = line.split(",");
+            this_snapshot->tot_mallocs = total_mem_data.at(0).toInt();
+            this_snapshot->tot_bytes_asked_for = total_mem_data.at(1).toInt();
+            this_snapshot->tot_bytes_usable = total_mem_data.at(2).toInt();
+            this_snapshot->tot_bytes_occupied = total_mem_data.at(3).toInt();
             /* Add new data to callstacks */
-            for( unsigned int i = 0; i < thisSnapshot->tot_mallocs; ++i) {
-                line = inLog.readLine();
-                QStringList callstackMemData = line.split(",");
-                struct callstackListing* thisCallstack 
-                        = callstacks.at(callstackMemData.at(0).toInt()-1);
-                thisCallstack->instances = callstackMemData.at(1).toInt();
-                thisCallstack->bytes_asked_for = callstackMemData.at(2)
-                                                                 .toInt();
-                thisCallstack->extra_usable = callstackMemData.at(3)
-                                                              .toInt();
-                thisCallstack->extra_occupied = callstackMemData.at(4)
-                                                                .toInt();
+            for( unsigned int i = 0; i < this_snapshot->tot_mallocs; ++i) {
+                line = in_log.readLine();
+                QStringList callstack_mem_data = line.split(",");
+                struct callstack_listing *this_callstack 
+                        = callstacks.at(callstack_mem_data.at(0).toInt()-1);
+
+                this_callstack->instances = callstack_mem_data.at(1).toInt();
+                this_callstack->bytes_asked_for = callstack_mem_data.at(2)
+                                                                    .toInt();
+                this_callstack->extra_usable = callstack_mem_data.at(3).toInt()
+                                               + this_callstack->
+                                                               bytes_asked_for;
+                this_callstack->extra_occupied = callstack_mem_data.at(4)
+                                                                    .toInt()
+                                                 + this_callstack->
+                                                                 extra_usable;
                 /* ensure proper counting */
-                int instanceCount = thisCallstack->instances;
-                while(instanceCount > 1) { 
+                int instance_count = this_callstack->instances;
+                while(instance_count > 1) { 
                     i++;
-                    instanceCount--;
+                    instance_count--;
                 }
+                this_snapshot->assoc_callstacks.append(this_callstack
+                                                       ->callstack_num);
             }
-            snapshots.append(thisSnapshot);
-        } while(!line.isNull() && 
-                !line.contains(QString("LOG END")));
-        snapshotLog.close();
+            if (counter == 1) /* dont add first to list*/{
+                continue;
+            }
+            snapshots.append(this_snapshot);
+        } while(line.isNull() == false && 
+                line.contains(QString("LOG END")) == false);
+        snapshot_log.close();
     }
     qDebug() << "INFO: snapshot.log read";
-
-    fillCallstacksTable();
-    drawSnapshotGraph();
+    /* Default to 0 */
+    fill_callstacks_table(0);
+    draw_snapshot_graph();
 }
 
 /* Private Slot
-   Fills callstacksTable with gathered data
-*/
-/* TODO fill in more data, have it be specific to snapshot*/
-void DR_Heapstat::fillCallstacksTable() {
-    qDebug() << "INFO: Entering DR_Heapstat::fillCallstackTable()";
+ * Fills callstacks_table with gathered data
+ */
+void 
+dr_heapstat_t::fill_callstacks_table(int snapshot) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::fill_callstacks_table(int "
+                "snapshot)";
+    /* refresh settings */
+    callstacks_table->clear();
+    callstacks_table->setRowCount(0);
+    callstacks_table->setColumnCount(5);
+    QStringList table_headers;
+    table_headers << tr("Call Stack") << tr("Symbol") << tr("Memory Allocated") 
+                  << tr("+Padding") << tr("+Headers");
+    callstacks_table->setHorizontalHeaderLabels(table_headers);
+    callstacks_table->setSortingEnabled(true);
+    callstacks_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    callstacks_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    callstacks_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    callstacks_table->verticalHeader()->hide();
+    callstacks_table->horizontalHeader()->setSectionResizeMode(1, 
+                                                      QHeaderView::Stretch);
+    /* resize to contents */
+    for(int i = 0; i < 5; i++) {
+        if (i == 1) /* already set */{
+            continue;
+        }
+        callstacks_table->horizontalHeader()->setSectionResizeMode(i,
+                                             QHeaderView::ResizeToContents);
+    }
 
-    /* Put data into callstackTable */
-    for(int i=0; i < callstacks.size(); i++) {
-        callstacksTable->insertRow(i);
-        QTableWidgetItem *item = new QTableWidgetItem;
-        item->setData(Qt::DisplayRole, i+1);
-        callstacksTable->setItem(i,0,item);
+    /* Put data into callstack_table */
+    int row_count = 0;
+    foreach(int callstack, snapshots.at(snapshot)->assoc_callstacks) {
+        callstacks_table->insertRow(row_count);
+        /* Callstack number */
+        QTableWidgetItem *num = new QTableWidgetItem;
+        num->setData(Qt::DisplayRole, callstack);
+        callstacks_table->setItem(row_count,0,num);
+        /* Symbols */
+        /* Memory data */
+        QTableWidgetItem *asked = new QTableWidgetItem;
+        asked->setData(Qt::DisplayRole, 
+                      (double)(callstacks.at(callstack-1)->bytes_asked_for));
+        callstacks_table->setItem(row_count,2,asked);
+
+        QTableWidgetItem *padding = new QTableWidgetItem;
+        padding->setData(Qt::DisplayRole, 
+                        (double)(callstacks.at(callstack-1)->extra_usable));
+        callstacks_table->setItem(row_count,3,padding);
+
+        QTableWidgetItem *headers = new QTableWidgetItem;
+        headers->setData(Qt::DisplayRole, 
+                        (double)(callstacks.at(callstack-1)->extra_occupied));
+        callstacks_table->setItem(row_count,4,headers);
+
     }
 }
 
 /* Public
-   Returns provided tool-names during loading
-*/
-QStringList DR_Heapstat::toolNames() const {
-    qDebug() << "INFO: Entering DR_Heapstat::toolNames()";
-    return QStringList() << "DR_Heapstat";
+ * Returns provided tool-names during loading
+ */
+QStringList 
+dr_heapstat_t::tool_names(void) const 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::tool_names(void)";
+    return QStringList() << "Dr. Heapstat";
 }
 
 /* Public
-   Returns a new instance of the tool
-*/
-DR_Heapstat *DR_Heapstat::createInstance() {
-    qDebug() << "INFO: Entering DR_Heapstat::createInstance()";
-    return new DR_Heapstat;
+ * Returns a new instance of the tool
+ */
+dr_heapstat_t *
+dr_heapstat_t::create_instance(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::create_instance(void)";
+    return new dr_heapstat_t;
 }
 
 /* Private Slot
-   Returns provided tool-names during loading
-*/
-void DR_Heapstat::logDirTextChangedSlot() {
-    qDebug() << "INFO: Entering DR_Heapstat::logDirTextChangedSlot()";
-    logDirTextChanged = true;
+ * Returns provided tool-names during loading
+ */
+void 
+dr_heapstat_t::log_dir_text_changed_slot(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::log_dir_text_changed_slot(void)";
+    log_dir_text_changed = true;
 }
 
 /* Private Slot
-   Loads preferences data
-*/
-void DR_Heapstat::loadSettings() {
-    qDebug() << "INFO: Entering DR_Heapstat::loadSettings()";
+ * Loads preferences data
+ */
+void 
+dr_heapstat_t::load_settings(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::load_settings(void)";
 }
 
 /* Private
-   Checks validity of directories
-*/
-bool DR_Heapstat::dr_checkDir(QDir dir) {
-    qDebug() << "INFO: Entering DR_Heapstat::dr_checkDir(QDir dir)";
-    QString errorMsg = "\'"; errorMsg += dir.canonicalPath() += "\'<br>";
+ * Checks validity of directories
+ */
+bool 
+dr_heapstat_t::dr_check_dir(QDir dir) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::dr_check_dir(QDir dir)";
+    QString error_msg = "\'"; 
+    error_msg += dir.canonicalPath() 
+              += "\'<br>";
     bool retVal = true;
 
-    if(!dir.exists() || !dir.isReadable()) {   
+    if (dir.exists() == false || 
+        dir.isReadable() == false) {   
         qDebug() << "WARNING: Failed to open directory: " 
                  << dir.canonicalPath();
-        errorMsg += "is an invalid directory<br>";
+        error_msg += "is an invalid directory<br>";
         retVal = false;
     }
-    if(!retVal) {
-        QMessageBox msgBox(QMessageBox::Warning, 
+    if (retVal == false) {
+        QMessageBox msg_box(QMessageBox::Warning, 
                            tr("Invalid Directory"),
-                           errorMsg, 0, this);
-        msgBox.exec();
+                           error_msg, 0, this);
+        msg_box.exec();
     }
     return retVal;
 }
 
 /* Private
-   Checks validity of directories
-*/
-bool DR_Heapstat::dr_checkFile(QFile& file) {
-    qDebug() << "INFO: Entering DR_Heapstat::dr_checkFile(QFile& file)";
-    QString errorMsg = "\'"; errorMsg += file.fileName() += "\'<br>";
+ * Checks validity of directories
+ */
+bool 
+dr_heapstat_t::dr_check_file(QFile& file) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::dr_check_file(QFile& file)";
+    QString error_msg = "\'"; 
+    error_msg += file.fileName() 
+              += "\'<br>";
     bool retVal = true;
 
-    if(!file.exists()) {   
+    if (file.exists() == false) {   
         qDebug() << "WARNING: Failed to open file: " 
                  << file.fileName();
-        errorMsg += "File does not exist<br>";
+        error_msg += "File does not exist<br>";
         retVal = false;
     } 
-    if(!retVal) {
-        QMessageBox msgBox(QMessageBox::Warning, 
+    if (retVal == false) {
+        QMessageBox msg_box(QMessageBox::Warning, 
                            tr("Invalid File"),
-                           errorMsg, 0, this);
-        msgBox.exec();
+                           error_msg, 0, this);
+        msg_box.exec();
     }
     
     return retVal;
 }
 
 /* Private Slot
-   Loads frame data into framesTextEdit for requested callstack
-*/
-void DR_Heapstat::loadFramesTextEdit(int currentRow, int currentColumn, 
-                                     int previousRow, int previousColumn) {
-    qDebug() << "INFO: Entering R_Heapstat::loadFramesTextEdit("
-                "int currentRow, int currentColumn, int previousRow, "
-                "int previousColumn)";
-    if (((currentRow != previousRow) ||
-         (currentColumn != previousColumn)) && 
-         callstacksTable->selectedItems().size() != 0) {
-        framesTextEdit->clear();
-        int callstackIndex = callstacksTable->item(currentRow,0)
-                                            ->data(Qt::DisplayRole)
-                                            .toInt()-1;
-        QStringList frames = callstacks.at(callstackIndex)->frameData;
-        framesTextEdit->insertPlainText(QString(tr("Callstack #")));
-        framesTextEdit->insertPlainText(QString::number(callstackIndex+1));
-        framesTextEdit->insertHtml(QString("<br>"));
+ * Loads frame data into frames_text_edit for requested callstack
+ */
+void 
+dr_heapstat_t::load_frames_text_edit(int current_row, int current_column,
+                                     int previous_row, int previous_column) 
+{
+    qDebug() << "INFO: Entering DR_Heapstat::load_frames_text_edit("
+                "int current_row, int current_column, int previous_row, "
+                "int previous_column)";
+    if ( ((current_row != previous_row) ||
+          (current_column != previous_column)) && 
+        callstacks_table->selectedItems().size() != 0) {
+        frames_text_edit->clear();
+        int callstack_index = callstacks_table->item(current_row,0)
+                                              ->data(Qt::DisplayRole)
+                                              .toInt()-1;
+        QStringList frames = callstacks.at(callstack_index)->frame_data;
+        frames_text_edit->insertPlainText(QString(tr("Callstack #")));
+        frames_text_edit->insertPlainText(QString::number(callstack_index+1));
+        frames_text_edit->insertHtml(QString("<br>"));
         /* Add frame data */
         foreach (const QString frame, frames) {
-            framesTextEdit->insertHtml(QString("<br>"));
-            framesTextEdit->insertPlainText(frame);            
+            frames_text_edit->insertHtml(QString("<br>"));
+            frames_text_edit->insertPlainText(frame);            
         }
     }
 }
 
 /* Private Slot
-   Handles creation/deletion of the graph
-*/
-void DR_Heapstat::drawSnapshotGraph() {
-    qDebug() << "INFO: Entering DR_Heapstat::drawSnapshotGraph()";
-    leftSide->removeWidget(snapshotGraph);
-    delete snapshotGraph;
-    snapshotGraph = new DR_Heapstat_Graph(&snapshots);
-    leftSide->addWidget(snapshotGraph,1,0);
+ * Handles creation/deletion of the graph
+ */
+void 
+dr_heapstat_t::draw_snapshot_graph(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::draw_snapshot_graph(void)";
+    /* remove */
+    left_side->removeWidget(snapshot_graph);
+    delete snapshot_graph;
+    /* create */
+    snapshot_graph = new dr_heapstat_graph_t(&snapshots);
+    left_side->addWidget(snapshot_graph,1,0);
+    connect(snapshot_graph, SIGNAL(highlight_changed(int)),
+            this, SLOT(fill_callstacks_table(int)));
+    connect(reset_graph_zoom_button, SIGNAL(clicked()),
+            snapshot_graph, SLOT(reset_graph_zoom()));
+
+}
+
+/* Private Slot
+ * Sends info about which lines to draw to snapshot_graph
+ */
+void 
+dr_heapstat_t::change_lines(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_t::change_lines(void)";
+    QCheckBox *emitter = (QCheckBox *)sender();
+    int id = -1;
+    if (emitter->text().contains(QString("Heap headers")) == true) {
+        id = 2;
+    } else if (emitter->text().contains(QString("Padding")) == true) {
+        id = 1;
+    } else if (emitter->text().contains(QString("requested")) == true) {
+        id = 0;
+    }
+    if (id != -1) {
+        snapshot_graph->refresh_lines(id);
+    }
 }

@@ -12,69 +12,102 @@
 **
 *************************************************************************/
 
-#define GRAPH_MARK_WIDTH 3
+#define GRAPH_MARK_WIDTH 5
 
 #include <QWidget>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
 #include <QDebug>
+#include <QMouseEvent>
+
+#include <cmath>
 
 #include "dr_heap_tool.h"
 #include "dr_heap_graph.h"
 
 /* Public
-   Constructor
-*/
-DR_Heapstat_Graph::DR_Heapstat_Graph(QVector<struct snapshotListing*>* vec)
-    : graphOuterMargin(10), maximumValue(QString::number(maxHeight())) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::DR_Heapstat_Graph"
-                "(QVector<struct snapshotListing*>* vec)";
+ * Constructor
+ */
+dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<struct snapshot_listing*> *vec)
+    : graph_outer_margin(10) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::dr_heapstat_graph_t"
+                "(QVector<struct snapshot_listing*> *vec)";
     setAttribute(Qt::WA_DeleteOnClose);
-    setHeapData(vec);
+    set_heap_data(vec);
 }
 
 /* Private
-   Sets heap data to be visualized
-*/
-void DR_Heapstat_Graph::setHeapData(QVector<struct snapshotListing*>* vec) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::setHeapData"
-                "(QVector<struct snapshotListing*>* vec)";
+ * Sets heap data to be visualized
+ */
+void 
+dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::set_heap_data"
+                "(QVector<struct snapshot_listing*> *vec)";
     /* memory should be taken care of by tool */
-    snapshots = vec;
-    QString maximumValue = QString::number(maxHeight());
+    if (vec != NULL) {
+        snapshots = *vec;        
+    }
+    maximum_value = QString::number(max_height());
+    max_width();
+
     QFontMetrics fm(font());
-    textHeight = fm.height();
-    textWidth = fm.width(maximumValue);
+    text_height = fm.height();
+    text_width = fm.width(maximum_value);
+
+    left_bound = graph_outer_margin + text_width + 5;
+    right_bound = left_bound + width() - y_axis_width() -
+                  2 * graph_outer_margin;   
+
+    view_start_percent = 0;
+    view_end_percent = 100;
+
+    highlighted_point = QPoint(0,0);
+    mem_alloc_line = padding_line = headers_line = true;
+
     update();
 }
 
 /* Protected
-   Paints an empty canvis or loads data
-*/
-void DR_Heapstat_Graph::paintEvent(QPaintEvent *event) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::paintEvent"
+ * Paints an empty canvis or loads data
+ */
+void 
+dr_heapstat_graph_t::paintEvent(QPaintEvent *event) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::paintEvent"
                 "(QPaintEvent *event)";
     QWidget::paintEvent(event);
 
     QPainter painter(this);
 
-    if (!snapshots)
-        drawEmptyGraph(&painter);
+    /* Fix origin location */
+    painter.translate(left_bound,
+                       height() - graph_outer_margin);
+    painter.scale(1,-1);
+
+    if (snapshots.isEmpty() == true)
+        draw_empty_graph(&painter);
     else {
-        drawXAxis(&painter);
-        drawYAxis(&painter);
-        drawHeapData(&painter);
+        draw_x_axis(&painter);
+        draw_y_axis(&painter);
+        draw_heap_data(&painter);
+        draw_selection(&painter);
+        painter.drawLine(QPoint(highlighted_point.x(),0),
+                         QPoint(highlighted_point.x(),height()));
     }
 }
 
 /* Private
-   Calculates max height of y-axis
-*/
-unsigned long DR_Heapstat_Graph::maxHeight() {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::maxHeight()";
+ * Calculates max height of y-axis
+ */
+unsigned long 
+dr_heapstat_graph_t::max_height(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::max_height(void)";
     unsigned long height = 0;
-    if(snapshots) {
-        foreach(struct snapshotListing* snapshot, *snapshots) {
+    if (snapshots.isEmpty() == false) {
+        foreach(struct snapshot_listing *snapshot, snapshots) {
             if (snapshot->tot_bytes_occupied > height)
                 height = snapshot->tot_bytes_occupied;
         }
@@ -83,208 +116,429 @@ unsigned long DR_Heapstat_Graph::maxHeight() {
 }
 
 /* Private
-   Calculates max width of x-axis
-*/
-unsigned long DR_Heapstat_Graph::maxWidth() {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::maxWidth()";
+ * Calculates max width of x-axis
+ */
+void 
+dr_heapstat_graph_t::max_width(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::max_width(void)";
     unsigned long width = 0;
-
-    foreach(struct snapshotListing* snapshot, *snapshots) {
-        width += snapshot->numTicks;
+    width_max = width;
+    if (snapshots.isEmpty() == false) {
+        foreach(struct snapshot_listing *snapshot, snapshots) {
+            width += snapshot->num_ticks;
+        }
     }
-
-    return width;
+    width_max = width;
 }
 
 /* Private
-   Returns width of yAxis
-*/
-qreal DR_Heapstat_Graph::yAxisWidth() {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::yAxisWidth()";
-    return textWidth + 5;
+ * Returns width of y_axis
+ */
+qreal 
+dr_heapstat_graph_t::y_axis_width(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::y_axis_width(void)";
+    return text_width + 5;
 }
 
 /* Private
-   Returns height of xAxis
-*/
+ * Returns height of x_axis
+ */
 /* XXX: no text on x-axis, probably don't need */
-qreal DR_Heapstat_Graph::xAxisHeight() {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::xAxisWidth()";
-    return textHeight + 5;
+qreal 
+dr_heapstat_graph_t::x_axis_height(void) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::x_axis_height(void)";
+    return text_height + 5;
 }
 
 /* Private
-   Calculates x-coord for given data
-*/
-qreal DR_Heapstat_Graph::dataPointX(int x) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::dataPointX(int x)";
-    int maxX = width() - yAxisWidth() - 2*graphOuterMargin;
-    return x * (maxX) / snapshots->count() ;
+ * Calculates x-coord for given data
+ */
+qreal 
+dr_heapstat_graph_t::data_point_x(int x) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::data_point_x(int x)";
+    int max_x = width() - y_axis_width() - 2 * graph_outer_margin;
+    return x * (max_x) / (view_end_percent - view_start_percent);
 }
 
 /* Private
-   Calculates y-coord for given data
-*/
-qreal DR_Heapstat_Graph::dataPointY(unsigned long y) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::dataPointY"
+ * Calculates y-coord for given data
+ */
+qreal 
+dr_heapstat_graph_t::data_point_y(unsigned long y) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::data_point_y"
                 "(unsigned long y)";
-    int maxY = height() - xAxisHeight() - 2*graphOuterMargin;
-    return y * (maxY) / maxHeight();
+    int max_y = height() - x_axis_height() - 2 * graph_outer_margin;
+    return y * (max_y) / maximum_value.toULong();
 }
 
 /* Private
-   Draws an empty graph when no data is present
-*/
-void DR_Heapstat_Graph::drawEmptyGraph(QPainter *painter) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::drawEmptyGraph"
+ * Draws an empty graph when no data is present
+ */
+void 
+dr_heapstat_graph_t::draw_empty_graph(QPainter *painter) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_empty_graph"
                 "(QPainter *painter)";
     QString msg("No datapoints available!");
 
-    qreal centreX = width() / 2;
-    qreal centreY = height() / 2;
+    qreal center_x = width() / 2;
+    qreal center_y = height() / 2;
 
-    QFontMetricsF fontMetrics(font());
-    qreal msgWidth = fontMetrics.width(msg);
-    qreal msgHeight = fontMetrics.height();
+    QFontMetricsF font_metrics(font());
+    qreal msg_width = font_metrics.width(msg);
+    qreal msg_height = font_metrics.height();
 
-    qreal msgX = centreX - (msgWidth / 2);
-    qreal msgY = centreY - (msgHeight / 2);
-
-    painter->drawText(QPointF(msgX, msgY), msg);
-}
-
-/* Private
-   Draws the x-axis
-*/
-void DR_Heapstat_Graph::drawXAxis(QPainter *painter) {
-   qDebug() << "INFO: Entering DR_Heapstat_Graph::drawXAxis"
-               "(QPainter *painter)";
-    painter->save();
-    /* Fix origin location */
-    painter->translate(graphOuterMargin + textWidth + 5,
-                       height() - graphOuterMargin);
-    painter->scale(1,-1);
-
-    QPen xAxisPen(QColor(qRgb(0, 0, 0)));
-
-    qreal xAxisX = 0;
-    qreal xAxisY = 0;
-    qreal xAxisWidth = width() - yAxisWidth() - 2*graphOuterMargin;
-
-    painter->setPen(xAxisPen);
-    painter->drawLine(QPointF(xAxisX, xAxisY), 
-                      QPointF(xAxisWidth, xAxisY));
-
-    //TODO: Use preference (whole thing)
-    //TODO: not just ticks
-    qreal xAxisMark = xAxisX;
-    foreach(struct snapshotListing* snapshot, *snapshots) {
-        Q_UNUSED(snapshot);
-        painter->drawLine(QPointF(xAxisMark, xAxisY), 
-                          QPointF(xAxisMark, xAxisY - GRAPH_MARK_WIDTH));
-        xAxisMark += (xAxisWidth-xAxisX) / snapshots->count();
-    }
-    /* draw max separately to avoid rounding errors */
-    painter->drawLine(QPointF(xAxisWidth, xAxisY - GRAPH_MARK_WIDTH), 
-                      QPointF(xAxisWidth, xAxisY));
-
-    painter->restore();
-}
-
-/* Private
-   draws y-axis and scale labels
-*/
-void DR_Heapstat_Graph::drawYAxis(QPainter *painter) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::drawYAxis"
-                "(QPainter *painter)";
-    painter->save();
-    /* Fix origin location */
-    painter->translate(graphOuterMargin + textWidth + 5,
-                       height() - graphOuterMargin);
-    painter->scale(1,-1);
-
-    QPen yAxisPen(QColor(qRgb(0, 0, 0)));
-
-    qreal yAxisX = 0;
-    qreal yAxisY = 0;
-    qreal yAxisHeight = height() - yAxisY 
-                        - xAxisHeight() - 2*graphOuterMargin;
-
-    painter->setPen(yAxisPen);
-    painter->drawLine(QPointF(yAxisX, yAxisY), 
-                      QPointF(yAxisX, yAxisHeight));
-
-    /* Draw scale */
-    qreal yAxisMark = 0;
-    long curValue = 0;
-    long maxVal = maximumValue.toLong();
-    int numTabs = 9; //TODO: Use preference
-    for (int count = 0; count < numTabs;++count) {
-        /* fix scale for text, it appears upside down */
-        painter->save();
-        painter->scale(1,-1);
-        painter->drawText(QRectF(-(textWidth + graphOuterMargin), 
-                                 -(yAxisMark + textHeight/2),
-                                 textWidth,
-                                 textHeight),
-                          QString::number(curValue),
-                          QTextOption(Qt::AlignRight));
-        painter->restore();
-        painter->drawLine(QPointF(yAxisX - GRAPH_MARK_WIDTH, yAxisMark), 
-                          QPointF(yAxisX, yAxisMark));
-        yAxisMark += (yAxisHeight-yAxisY) / numTabs;
-        curValue += maxVal / numTabs;
-    }
-    /* draw max separately to avoid rounding errors */
-    painter->drawLine(QPointF(yAxisX - GRAPH_MARK_WIDTH, yAxisHeight), 
-                      QPointF(yAxisX, yAxisHeight));
+    qreal msg_x = center_x - (msg_width / 2);
+    qreal msg_y = center_y - (msg_height / 2);
+    
     /* fix scale for text, it appears upside down */
     painter->save();
     painter->scale(1,-1);
-    painter->drawText(QRectF(-(textWidth + graphOuterMargin), 
-                             -(yAxisHeight + textHeight/2),
-                             textWidth,
-                             textHeight),
-                      maximumValue,
-                      QTextOption(Qt::AlignRight));
-    painter->restore();
+    painter->drawText(QPointF(msg_x, msg_y), msg);
     painter->restore();
 }
 
 /* Private
-   Graphs data
-*/
-void DR_Heapstat_Graph::drawHeapData(QPainter *painter) {
-    qDebug() << "INFO: Entering DR_Heapstat_Graph::drawHeapData"
+ *  Draws the x-axis
+ */
+void 
+dr_heapstat_graph_t::draw_x_axis(QPainter *painter) 
+{
+   qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_x_axis"
+               "(QPainter *painter)";
+    painter->save();
+
+    QPen x_axis_pen(QColor(qRgb(0, 0, 0)));
+
+    qreal x_axis_x = 0;
+    qreal x_axis_y = 0;
+    qreal x_axis_width = right_bound - left_bound;
+
+    painter->setPen(x_axis_pen);
+    painter->drawLine(QPointF(x_axis_x, x_axis_y), 
+                      QPointF(x_axis_width, x_axis_y));
+
+    qreal x_axis_mark = x_axis_x;
+    /* Draw tallies based on % */
+    for(qreal i = 0; i < (view_end_percent - view_start_percent); i++) {
+        painter->drawLine(QPointF(x_axis_mark, x_axis_y), 
+                          QPointF(x_axis_mark, x_axis_y - GRAPH_MARK_WIDTH));
+
+        /* Adjust count */
+        x_axis_mark += (x_axis_width-x_axis_x) / 
+                       (view_end_percent - view_start_percent - 1);
+    }
+
+    painter->restore();
+}
+
+/* Private
+ * draws y-axis and scale labels
+ */
+void 
+dr_heapstat_graph_t::draw_y_axis(QPainter *painter) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_y_axis"
                 "(QPainter *painter)";
     painter->save();
-    /* Fix origin location */
-    painter->translate(graphOuterMargin + textWidth + 5,
-                       height() - graphOuterMargin);
-    painter->scale(1,-1);
 
-    QPoint lastPoint(dataPointX(snapshots->at(0)->snapshotNum),
-                     dataPointY(snapshots->at(0)->tot_bytes_occupied));
+    QPen y_axis_pen(QColor(qRgb(0, 0, 0)));
 
-    foreach(struct snapshotListing* snapshot, *snapshots) {
+    qreal y_axis_x = 0;
+    qreal y_axis_y = 0;
+    qreal y_axis_height = height() - y_axis_y -
+                          x_axis_height() - 2 * graph_outer_margin;
+
+    painter->setPen(y_axis_pen);
+    painter->drawLine(QPointF(y_axis_x, y_axis_y), 
+                      QPointF(y_axis_x, y_axis_height));
+
+    /* Draw scale */
+    qreal y_axis_mark = 0;
+    unsigned long cur_value = 0;
+    unsigned long max_val = maximum_value.toULong();
+    int num_tabs = 10; //TODO: Use preference
+    for (int count = 0; count < num_tabs;++count) {
+        /* Ensure max is correct */
+        if (count == (num_tabs - 1)) {
+            cur_value = max_val;
+            y_axis_mark = y_axis_height;
+        }
+        /* fix scale for text, it appears upside down */
+        painter->save();
+        painter->scale(1,-1);
+        painter->drawText(QRectF(-(text_width + graph_outer_margin), 
+                                 -(y_axis_mark + text_height/2),
+                                 text_width,
+                                 text_height),
+                          QString::number(cur_value),
+                          QTextOption(Qt::AlignRight));
+        painter->restore();
+        painter->drawLine(QPointF(y_axis_x - GRAPH_MARK_WIDTH, y_axis_mark), 
+                          QPointF(y_axis_x, y_axis_mark));
+
+        /* Adjust counts */
+        y_axis_mark += (y_axis_height-y_axis_y) / (num_tabs - 1);
+        cur_value += max_val / (double)(num_tabs - 1);
+    }
+    painter->restore();
+}
+
+/* Private
+ * Helps draw_heap_data(...) graph data
+ */
+void 
+dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent, 
+                                QPoint *prev_point, unsigned long *data) 
+{
+    qreal dp_x = data_point_x(total_percent - view_start_percent);
+    qreal dp_y = data_point_y(*data);
+    
+    QPoint this_point(dp_x, dp_y);
+    painter->drawLine(*prev_point, this_point);
+    painter->drawRect(dp_x - 1.5, dp_y - 1.5, 3, 3);
+    prev_point->setX(dp_x);
+    prev_point->setY(dp_y);
+}
+
+/* Private
+ * Graphs data
+ */
+void 
+dr_heapstat_graph_t::draw_heap_data(QPainter *painter) 
+{
+    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_heap_data"
+                "(QPainter *painter)";
+    painter->save();
+
+    qreal total_percent = 0;
+    /* need for each line */
+    QVector<QPoint> prev_points;
+    prev_points.append(QPoint(
+                           data_point_x(total_percent),
+                           data_point_y(snapshots.at(0)->tot_bytes_asked_for)));
+    prev_points.append(QPoint(
+                           data_point_x(total_percent),
+                           data_point_y(snapshots.at(0)->tot_bytes_usable)));
+    prev_points.append(QPoint(
+                           data_point_x(total_percent),
+                           data_point_y(snapshots.at(0)->tot_bytes_occupied)));
+
+    foreach(struct snapshot_listing *snapshot, snapshots) {
         /* TODO: use preference for color*/
-        QBrush dataPointBrush(Qt::red);
-        QPen dataPointPen(QColor(qRgb(0, 0, 0)));
+        QBrush data_point_brush(Qt::red);
+        QPen data_point_pen(Qt::white, 3, Qt::SolidLine, 
+                            Qt::RoundCap, Qt::RoundJoin);
 
         painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setBrush(data_point_brush);
+        painter->setPen(data_point_pen);
 
-        painter->setBrush(dataPointBrush);
-        painter->setPen(dataPointPen);
-
-        qreal dpX = dataPointX(snapshot->snapshotNum);
-        qreal dpY = dataPointY(snapshot->tot_bytes_occupied);
-        
-        QPoint thisPoint(dpX, dpY);
-        painter->drawLine(lastPoint, thisPoint);
-        painter->drawRect(dpX,dpY,5,5);
-        lastPoint.setX(dpX);
-        lastPoint.setY(dpY);
+        total_percent += round((snapshot->num_ticks / ((double)width_max)) 
+                               * 100);
+        if (total_percent >= view_start_percent &&
+            total_percent <= view_end_percent) {
+            if (mem_alloc_line == true) {
+                data_point_pen.setColor(QColor(255, 102, 0));
+                painter->setPen(data_point_pen);
+                draw_helper(painter, total_percent, 
+                            &prev_points.data()[0], 
+                            &snapshot->tot_bytes_asked_for);
+            }
+            if (padding_line == true) {
+                data_point_pen.setColor(QColor(0, 204, 0));
+                painter->setPen(data_point_pen);
+                draw_helper(painter, total_percent, 
+                            &prev_points.data()[1], 
+                            &snapshot->tot_bytes_usable);
+            }
+            if (headers_line == true) {
+                data_point_pen.setColor(QColor(27, 168, 188));
+                painter->setPen(data_point_pen);
+                draw_helper(painter, total_percent, 
+                            &prev_points.data()[2], 
+                            &snapshot->tot_bytes_occupied);
+            }
+        }
         painter->restore();
     }
     painter->restore();
+}
+
+/* Private
+ * Draws a rectangle for a selection zoom guide
+ */
+void 
+dr_heapstat_graph_t::draw_selection(QPainter *painter) 
+{
+    painter->save();
+    /* transparency == 40 */
+    QColor selection_color(0, 203, 204, 40);
+    painter->setPen(QPen(selection_color));
+    painter->setBrush(QBrush(selection_color, Qt::SolidPattern));
+    painter->drawRect(first_point.x(), -10,
+                      last_point.x()-first_point.x(),last_point.y());
+    painter->restore();
+}
+
+/* Protected
+ * Interactivity for graph
+ *   -Selection Zoom
+ */
+void 
+dr_heapstat_graph_t::mousePressEvent(QMouseEvent *event) 
+{
+    if (event->button() == Qt::RightButton) {
+        mouse_pressed = true;
+        first_point = event->pos();  
+        first_point.setX(event->pos().x()-left_bound);      
+    }
+}
+
+/* Protected
+ * Interactivity for graph
+ *   -Selection Zoom
+ */
+void 
+dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event) 
+{
+    /* FIXME: wrong numbers sometimes */
+    if (event->button() == Qt::RightButton) {
+        /* set vars to adjust graph
+           then adjust graph */
+        qDebug() << first_point.x() << " " << last_point.x();
+        qDebug() << right_bound-left_bound;
+
+        qreal temp_start = view_start_percent;
+        qreal temp_end = view_end_percent;
+        qreal bound_diff = (right_bound - left_bound);
+        view_start_percent = (first_point.x() / (bound_diff)) * 100;
+        view_start_percent = temp_start + (temp_end - temp_start) 
+                                        * (view_start_percent / 100);
+        view_end_percent = (last_point.x() / (bound_diff)) * 100;
+
+        qDebug() << view_end_percent << (((int)view_end_percent % 100)/100);
+
+        view_end_percent = temp_end - (temp_end - temp_start) 
+                                    * (((int)view_end_percent % 100)
+                                    / (double)100);
+        /* switch if user went right to left */                            
+        if (first_point.x() > last_point.x()) {
+            qreal temp = view_start_percent;
+            view_start_percent = view_end_percent;
+            view_end_percent = temp;
+        }
+
+        qDebug() << view_start_percent << " " << view_end_percent 
+                 << " " << temp_start << " " << temp_end;
+
+        /* reset selection info */
+        mouse_pressed = false;
+        first_point.setX(0);
+        first_point.setY(0);
+        last_point.setX(0);
+        last_point.setY(0);
+        update();
+    }
+}
+
+/* Protected
+ * Interactivity for graph
+ *   -Selection Zoom
+ *   -Snapshot Highlighting
+ */
+void 
+dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event) 
+{
+    qreal x_val = event->pos().x();
+    /* Check bounds */
+    if (event->pos().x() < left_bound) {
+        x_val = left_bound;
+    } else if (event->pos().x() > right_bound) {
+        x_val = right_bound;
+    }
+    /* For selection zoom */
+    if (event->buttons() & Qt::RightButton) {
+        last_point = QPoint(x_val-left_bound,height());
+        update();
+    } /* for snapshot highlighting */ 
+    else if (event->buttons() & Qt::LeftButton) {
+        highlighted_point = event->pos();
+        highlighted_point.setX(x_val-left_bound);
+        update();
+        highlighted_snapshot();
+    }
+}
+
+/* Protected
+ * Adjusts right_bound with change in widget size
+ */
+void 
+dr_heapstat_graph_t::resizeEvent(QResizeEvent *event) 
+{
+    /* dependent on width */
+    right_bound = left_bound + width() - y_axis_width() - 
+                  2 * graph_outer_margin;
+}
+
+/* Public slots
+ * dis/en/ables line drawing
+ */
+void 
+dr_heapstat_graph_t::refresh_lines(int line) 
+{
+    switch (line) {
+        case 0:
+            mem_alloc_line = !mem_alloc_line;
+            break;
+        case 1:
+            padding_line = !padding_line;
+            break;
+        case 2:
+            headers_line = !headers_line;
+            break;
+        default:
+            break;
+    }
+    update();
+}
+
+/* Private
+ * Finds which snapshot to highlight according to slider position
+ */
+int 
+dr_heapstat_graph_t::highlighted_snapshot(void) 
+{
+    qreal total_percent_lesser = 0;
+    qreal total_percent_greater = 0;
+    qreal highlight_percent = highlighted_point.x() / (right_bound-left_bound)
+                              * 100;
+    foreach(struct snapshot_listing* snapshot, snapshots) {
+        total_percent_greater += round((snapshot->num_ticks / 
+                                       ((double)width_max)) * 100);
+        if (highlight_percent >= total_percent_lesser &&
+            highlight_percent <= total_percent_greater) {
+            emit highlight_changed(snapshot->snapshot_num);
+            return snapshot->snapshot_num;
+        }
+        total_percent_lesser = total_percent_greater;
+    }
+    return 0;
+}
+
+/* Public slots
+ * resets the selection zoom on the graph
+ */
+void 
+dr_heapstat_graph_t::reset_graph_zoom(void) 
+{
+    view_start_percent = 0;
+    view_end_percent = 100;
+    update();
 }

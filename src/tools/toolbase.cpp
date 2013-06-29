@@ -21,30 +21,36 @@
 /* Public
    Constructor,
 */
-ToolBase::ToolBase() {
+tool_base_t::tool_base_t() 
+{
     setAttribute(Qt::WA_DeleteOnClose);
-    isUntitled = true;
+    is_untitled = true;
 }
 
 /* Public
    Constructor,
 */
-ToolBase::ToolBase(QWidget *parent)
-    :QWidget(parent) {
-    ToolBase();
+tool_base_t::tool_base_t(QWidget *parent)
+    :QWidget(parent) 
+{
+    tool_base_t();
 }
 
 /* Public
    Provides just filename and extension
 */
-QString ToolBase::userFriendlyCurrentFile() {
-    return strippedName(curFile);
+QString 
+tool_base_t::user_friendly_current_file() 
+{
+    return stripped_name(cur_file);
 }
 
 /* Protected
    Close or cancel?
 */
-void ToolBase::closeEvent(QCloseEvent *event) {
+void 
+tool_base_t::closeEvent(QCloseEvent *event) 
+{
     if (true) {
         event->accept();
     } else {
@@ -55,16 +61,20 @@ void ToolBase::closeEvent(QCloseEvent *event) {
 /* Private
    Sets the current file and adjusts display accordingly
 */
-void ToolBase::setCurrentFile(const QString &fileName) {
-    curFile = QFileInfo(fileName).canonicalFilePath();
-    isUntitled = false;
+void 
+tool_base_t::set_current_file(const QString &file_name) 
+{
+    cur_file = QFileInfo(file_name).canonicalFilePath();
+    is_untitled = false;
     setWindowModified(false);
-    setWindowTitle(userFriendlyCurrentFile() + "[*]");
+    setWindowTitle(user_friendly_current_file() + "[*]");
 }
 
 /* Private
    Provides just filename and extension
 */
-QString ToolBase::strippedName(const QString &fullFileName) {
-    return QFileInfo(fullFileName).fileName();
+QString 
+tool_base_t::stripped_name(const QString &full_file_name) 
+{
+    return QFileInfo(full_file_name).fileName();
 }

@@ -19,200 +19,219 @@
 #include "tools/toolbase.h"
 
 /* Public
-   Constructor, everything begins here
-*/
-MainWindow::MainWindow() {
-    windowMapper = new QSignalMapper(this);
-    tabArea = new QTabWidget;
-    tabArea->setTabsClosable(true);
-    tabArea->setMovable(true);
-    connect(tabArea, SIGNAL(tabCloseRequested(int)),
-            this, SLOT(maybeClose(int)));
-    setCentralWidget(tabArea);
+ * Constructor, everything begins here
+ */
+main_window_t::main_window_t(void) 
+{
+    window_mapper = new QSignalMapper(this);
+    tab_area = new QTabWidget(this);
+    tab_area->setTabsClosable(true);
+    tab_area->setMovable(true);
+    connect(tab_area, SIGNAL(tabCloseRequested(int)),
+            this, SLOT(maybe_close(int)));
+    setCentralWidget(tab_area);
     
-    connect(tabArea, SIGNAL(currentChanged(int)),
-            this, SLOT(updateMenus()));
+    connect(tab_area, SIGNAL(currentChanged(int)),
+            this, SLOT(update_menus()));
 
-    createActions();
-    createMenus();
-    createStatusBar();
-    updateMenus();
-    loadTools();
+    create_actions();
+    create_menus();
+    create_status_bar();
+    update_menus();
+    load_tools();
 
-    readSettings();
+    read_settings();
 
     setWindowTitle(tr("DR-GUI"));
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
 /* Protected
-   Handles closing of all tabs
-*/
-void MainWindow::closeEvent(QCloseEvent *event) {
-    closeAllTabs();
-    if (tabArea->currentWidget()) {
+ * Handles closing of all tabs
+ */
+void 
+main_window_t::close_event(QCloseEvent *event) 
+{
+    close_all_tabs();
+    if (tab_area->currentWidget() != NULL) {
         event->ignore();
     } else {
-        writeSettings();
+        write_settings();
         event->accept();
     }
 }
 
 /* Private Slot
-   Shows about page for this program
-*/
-void MainWindow::about() {
+ * Shows about page for this program
+ */
+void 
+main_window_t::about(void) 
+{
    QMessageBox::about(this, tr("About DR-GUI"),
-            tr("<center><b>DR-GUI</b></center><br>"
-               "Interface for Dynamorio and various extensions"));
+                      tr("<center><b>DR-GUI</b></center><br>"
+                         "Interface for Dynamorio and various extensions"));
 }
 
 /* Slot
-   Updates the menus to reflect current tab's abilities
-*/
-void MainWindow::updateMenus() {
-    bool hasToolBase = (activeToolBase() != 0);
-    closeAct->setEnabled(hasToolBase);
-    closeAllAct->setEnabled(hasToolBase);
-    nextAct->setEnabled(hasToolBase);
-    previousAct->setEnabled(hasToolBase);
-    separatorAct->setVisible(hasToolBase);
+ * Updates the menus to reflect current tab's abilities
+ */
+void 
+main_window_t::update_menus(void) 
+{
+    bool has_tool_base = (active_tool_base() != 0);
+    close_act->setEnabled(has_tool_base);
+    close_all_act->setEnabled(has_tool_base);
+    next_act->setEnabled(has_tool_base);
+    previous_act->setEnabled(has_tool_base);
+    separator_act->setVisible(has_tool_base);
 }
 
 /* Private Slot
-   Updates the Window menu to reflect current tab's abilities
-*/
-void MainWindow::updateWindowMenu() {
-    windowMenu->clear();
-    windowMenu->addAction(closeAct);
-    windowMenu->addAction(closeAllAct);
-    windowMenu->addSeparator();
-    windowMenu->addAction(nextAct);
-    windowMenu->addAction(previousAct);
-    windowMenu->addAction(separatorAct);
+ * Updates the Window menu to reflect current tab's abilities
+ */
+void 
+main_window_t::update_window_menu(void) 
+{
+    window_menu->clear();
+    window_menu->addAction(close_act);
+    window_menu->addAction(close_all_act);
+    window_menu->addSeparator();
+    window_menu->addAction(next_act);
+    window_menu->addAction(previous_act);
+    window_menu->addAction(separator_act);
 
-    separatorAct->setVisible(tabArea->currentWidget());
+    separator_act->setVisible(tab_area->currentWidget());
 
-    for (int index = 0; index < tabArea->count(); ++index) {
-        ToolBase *tool = qobject_cast<ToolBase *>(tabArea->widget(index));
+    for (int i = 0; i < tab_area->count(); ++i) {
+        tool_base_t *tool = qobject_cast<tool_base_t *>(tab_area->widget(i));
 
         QString text;
-        if (index < 9) {
-            text = tr("&%1 %2").arg(index + 1)
-                               .arg(tabArea->tabText(index) + ": " +
-                                    tool->userFriendlyCurrentFile());
+        if (i < 9) {
+            text = tr("&%1 %2").arg(i + 1)
+                               .arg(tab_area->tabText(i) + ": " +
+                                    tool->user_friendly_current_file());
         } else {
-            text = tr("%1 %2").arg(index + 1)
-                              .arg(tabArea->tabText(index) + ": " +
-                                   tool->userFriendlyCurrentFile());
+            text = tr("%1 %2").arg(i + 1)
+                              .arg(tab_area->tabText(i) + ": " +
+                                   tool->user_friendly_current_file());
         }
-        QAction *action  = windowMenu->addAction(text);
+        QAction *action  = window_menu->addAction(text);
         action->setCheckable(true);
-        action ->setChecked(tool == activeToolBase());
-        connect(action, SIGNAL(triggered()), windowMapper, SLOT(map()));
-        windowMapper->setMapping(action, index);
-        connect(windowMapper, SIGNAL(mapped(int)), 
-                tabArea, SLOT(setCurrentIndex(int)));
+        action ->setChecked(tool == active_tool_base());
+        connect(action, SIGNAL(triggered()), 
+                window_mapper, SLOT(map()));
+        window_mapper->setMapping(action, i);
+        connect(window_mapper, SIGNAL(mapped(int)), 
+                tab_area, SLOT(setCurrentIndex(int)));
     }
 }
 
 /* Private Slot
-   Creates and connects the actions for the mainwindow
-*/
-void MainWindow::createActions() {
-    separatorAct = new QAction(this);
-    separatorAct->setSeparator(true);
+ * Creates and connects the actions for the mainwindow
+ */
+void 
+main_window_t::create_actions(void) 
+{
+    separator_act = new QAction(this);
+    separator_act->setSeparator(true);
 
     /* File */
-    exitAct = new QAction(tr("E&xit"), this);
-    exitAct->setShortcuts(QKeySequence::Quit);
-    exitAct->setStatusTip(tr("Exit the application"));
-    connect(exitAct, SIGNAL(triggered()), 
+    exit_act = new QAction(tr("E&xit"), this);
+    exit_act->setShortcuts(QKeySequence::Quit);
+    exit_act->setStatusTip(tr("Exit the application"));
+    connect(exit_act, SIGNAL(triggered()), 
             qApp, SLOT(closeAllWindows()));
 
     /* Edit */
-    preferencesAct = new QAction(tr("&Preferences"), this);
-    preferencesAct->setStatusTip(tr("Edit Preferences"));
-    connect(preferencesAct, SIGNAL(triggered()), 
-            this, SLOT(showPreferencesDialog()));
+    preferences_act = new QAction(tr("&Preferences"), this);
+    preferences_act->setStatusTip(tr("Edit Preferences"));
+    connect(preferences_act, SIGNAL(triggered()), 
+            this, SLOT(show_preferences_dialog()));
 
     /* Window */
-    closeAct = new QAction(tr("Cl&ose"), this);
-    closeAct->setStatusTip(tr("Close the active tab"));
-    connect(closeAct, SIGNAL(triggered()),
-            this, SLOT(maybeCloseMe()));
+    close_act = new QAction(tr("Cl&ose"), this);
+    close_act->setStatusTip(tr("Close the active tab"));
+    connect(close_act, SIGNAL(triggered()),
+            this, SLOT(maybe_close_me()));
 
-    closeAllAct = new QAction(tr("Close &All"), this);
-    closeAllAct->setStatusTip(tr("Close all the tabs"));
-    connect(closeAllAct, SIGNAL(triggered()),
-            this, SLOT(closeAllTabs()));
+    close_all_act = new QAction(tr("Close &All"), this);
+    close_all_act->setStatusTip(tr("Close all the tabs"));
+    connect(close_all_act, SIGNAL(triggered()),
+            this, SLOT(close_all_tabs()));
 
-    nextAct = new QAction(tr("Ne&xt"), this);
-    nextAct->setShortcuts(QKeySequence::NextChild);
-    nextAct->setStatusTip(tr("Move the focus to the next tab"));
-    connect(nextAct, SIGNAL(triggered()),
-            this, SLOT(activateNextTab()));
+    next_act = new QAction(tr("Ne&xt"), this);
+    next_act->setShortcuts(QKeySequence::NextChild);
+    next_act->setStatusTip(tr("Move the focus to the next tab"));
+    connect(next_act, SIGNAL(triggered()),
+            this, SLOT(activate_next_tab()));
 
-    previousAct = new QAction(tr("Pre&vious"), this);
-    previousAct->setShortcuts(QKeySequence::PreviousChild);
-    previousAct->setStatusTip(tr("Move the focus to the previous "
-                                 "tab"));
-    connect(previousAct, SIGNAL(triggered()),
-            this, SLOT(activatePreviousTab()));
+    previous_act = new QAction(tr("Pre&vious"), this);
+    previous_act->setShortcuts(QKeySequence::PreviousChild);
+    previous_act->setStatusTip(tr("Move the focus to the previous "
+                                  "tab"));
+    connect(previous_act, SIGNAL(triggered()),
+            this, SLOT(activate_previous_tab()));
 
     /* Help */
-    aboutAct = new QAction(tr("&About"), this);
-    aboutAct->setStatusTip(tr("Show the application's About box"));
-    connect(aboutAct, SIGNAL(triggered()), 
+    about_act = new QAction(tr("&About"), this);
+    about_act->setStatusTip(tr("Show the application's About box"));
+    connect(about_act, SIGNAL(triggered()), 
             this, SLOT(about()));
 
-    aboutQtAct = new QAction(tr("About &Qt"), this);
-    aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
-    connect(aboutQtAct, SIGNAL(triggered()), 
+    about_qt_act = new QAction(tr("About &Qt"), this);
+    about_qt_act->setStatusTip(tr("Show the Qt library's About box"));
+    connect(about_qt_act, SIGNAL(triggered()), 
             qApp, SLOT(aboutQt()));
 
     /* Tools */
-    toolActionGroup = new QActionGroup(this);
+    tool_action_group = new QActionGroup(this);
 }
 
 /* Private
-   Creates the menus in the menu bar of the mainwindow
-*/
-void MainWindow::createMenus() {
-    fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addSeparator();
-    QAction *action = fileMenu->addAction(tr("Switch layout direction"));
+ * Creates the menus in the menu bar of the mainwindow
+ */
+void 
+main_window_t::create_menus(void) 
+{
+    file_menu = menuBar()->addMenu(tr("&File"));
+    file_menu->addSeparator();
+    QAction *action = file_menu->addAction(tr("Switch layout direction"));
     connect(action, SIGNAL(triggered()), 
-            this, SLOT(switchLayoutDirection()));
-    fileMenu->addAction(exitAct);
+            this, SLOT(switch_layout_direction()));
+    file_menu->addAction(exit_act);
 
-    editMenu = menuBar()->addMenu(tr("&Edit"));
-    editMenu->addAction(preferencesAct);
+    edit_menu = menuBar()->addMenu(tr("&Edit"));
+    edit_menu->addAction(preferences_act);
 
-    windowMenu = menuBar()->addMenu(tr("&Window"));
-    updateWindowMenu();
-    connect(windowMenu, SIGNAL(aboutToShow()), this, SLOT(updateWindowMenu()));
+    window_menu = menuBar()->addMenu(tr("&Window"));
+    update_window_menu();
+    connect(window_menu, SIGNAL(aboutToShow()), 
+            this, SLOT(update_window_menu()));
 
     menuBar()->addSeparator();
 
-    helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(aboutAct);
-    helpMenu->addAction(aboutQtAct);
+    help_menu = menuBar()->addMenu(tr("&Help"));
+    help_menu->addAction(about_act);
+    help_menu->addAction(about_qt_act);
 
-    toolMenu = menuBar()->addMenu(tr("&Tool"));
+    tool_menu = menuBar()->addMenu(tr("&Tool"));
 }
 
 /* Private
-   Creates status bar for displaying status tips
-*/
-void MainWindow::createStatusBar() {
+ * Creates status bar for displaying status tips
+ */
+void 
+main_window_t::create_status_bar(void) 
+{
     statusBar()->showMessage(tr("Ready"));
 }
 
 /* Private
-   loads ini settings for mainwindow
-*/
-void MainWindow::readSettings() {
+ * loads ini settings for mainwindow
+ */
+void 
+main_window_t::read_settings(void) 
+{
     QSettings settings("Dynamorio", "DR-GUI");
     QPoint pos = settings.value("pos", QPoint(200, 200)).toPoint();
     QSize size = settings.value("size", QSize(400, 400)).toSize();
@@ -221,18 +240,22 @@ void MainWindow::readSettings() {
 }
 
 /* Private
-   Saves ini settings for mainwindow
-*/
-void MainWindow::writeSettings() {
+ * Saves ini settings for mainwindow
+ */
+void 
+main_window_t::write_settings(void) 
+{
     QSettings settings("Dynamorio", "DR-GUI");
     settings.setValue("pos", pos());
     settings.setValue("size", size());
 }
 
 /* Private Slot
-   Switches direction of layout for mainwindow
-*/
-void MainWindow::switchLayoutDirection() {
+ * Switches direction of layout for mainwindow
+ */
+void 
+main_window_t::switch_layout_direction(void) 
+{
     if (layoutDirection() == Qt::LeftToRight)
         qApp->setLayoutDirection(Qt::RightToLeft);
     else
@@ -240,136 +263,156 @@ void MainWindow::switchLayoutDirection() {
 }
 
 /* Private
-   finds and returns active ToolBase tab, if there is one
-*/
-ToolBase *MainWindow::activeToolBase() {
-    int activeTab = tabArea->currentIndex();
-    if ( activeTab != -1)
-        return qobject_cast<ToolBase *>(tabArea->currentWidget());
+ * finds and returns active ToolBase tab, if there is one
+ */
+tool_base_t *
+main_window_t::active_tool_base(void) 
+{
+    int active_tab = tab_area->currentIndex();
+    if (active_tab != -1)
+        return qobject_cast<tool_base_t *>(tab_area->currentWidget());
     return 0;
 }
 
 /* Private Slot
-   Displays preferences dialog
-*/
-void MainWindow::showPreferencesDialog() {
-    //OptionBase optBase;
-    //optBase.exec();
+ * Displays preferences dialog
+ */
+void 
+main_window_t::show_preferences_dialog(void) 
+{
+    /* Not implemented yet */
 }
 
 /* Private Slot
-   Closes every tab in mainwindow
-*/
-void MainWindow::closeAllTabs() {
-    int max = tabArea->count();
-    for (int tabCount = 0; tabCount < max; ++tabCount) {
-        tabArea->removeTab(0);
+ * Closes every tab in mainwindow
+ */
+void 
+main_window_t::close_all_tabs(void) 
+{
+    int max = tab_area->count();
+    for (int tab_count = 0; tab_count < max; ++tab_count) {
+        tab_area->removeTab(0);
     }
 }
 
 /* Private Slot
-   helper for closing current tab
-*/
-void MainWindow::maybeCloseMe() {
-    maybeClose(tabArea->currentIndex());
+ * helper for closing current tab
+ */
+void 
+main_window_t::maybe_close_me(void) 
+{
+    maybe_close(tab_area->currentIndex());
 }
 
 /* Private Slot
-   Confirms closing of a tab
-*/
-void MainWindow::maybeClose(int index) {
+ * Confirms closing of a tab
+ */
+void 
+main_window_t::maybe_close(int index) 
+{
     QMessageBox::StandardButton ret;
     ret = QMessageBox::warning(this, tr("Confirm"),
-                    tr("Are you sure you want to close '%1'?")
-                        .arg(tabArea->tabText(index)),
-                    QMessageBox::Yes | QMessageBox::No |
-                    QMessageBox::Cancel);
+                               tr("Are you sure you want to close '%1'?")
+                                   .arg(tab_area->tabText(index)),
+                               QMessageBox::Yes | QMessageBox::No |
+                               QMessageBox::Cancel);
     if (ret == QMessageBox::Yes)
-        hideTab(index);
+        hide_tab(index);
 }
 
 /* Private Slot
-   Closes a tab
-*/
-void MainWindow::hideTab(int index) {
-    tabArea->removeTab(index);
+ * Closes a tab
+ */
+void 
+main_window_t::hide_tab(int index) 
+{
+    tab_area->removeTab(index);
 }
 
 /* Private Slot
-   Moves view to next tab in order, loops
-*/
-void MainWindow::activateNextTab() {
-    int index = tabArea->currentIndex() + 1;
-    if(index == tabArea->count())
+ * Moves view to next tab in order, loops
+ */
+void 
+main_window_t::activate_next_tab(void) 
+{
+    int index = tab_area->currentIndex() + 1;
+    if (index == tab_area->count())
         index = 0;
-    tabArea->setCurrentIndex(index);
+    tab_area->setCurrentIndex(index);
 }
 
 /* Private Slot
-   Movies view to previous tab in order, loops
-*/
-void MainWindow::activatePreviousTab() {
-    int index = tabArea->currentIndex() - 1;
-    if(index == -1)
-        index = tabArea->count() - 1;
-    tabArea->setCurrentIndex(index);
+ * Movies view to previous tab in order, loops
+ */
+void 
+main_window_t::activate_previous_tab(void) 
+{
+    int index = tab_area->currentIndex() - 1;
+    if (index == -1)
+        index = tab_area->count() - 1;
+    tab_area->setCurrentIndex(index);
 }
 
 /* Private
-   Loads available tools
-*/
-void MainWindow::loadTools()
+ * Loads available tools
+ */
+void 
+main_window_t::load_tools(void)
 {
-    pluginsDir = QDir(qApp->applicationDirPath());
+    plugins_dir = QDir(qApp->applicationDirPath());
 
     #if defined(Q_OS_WIN)
-        /*  TODO */
+        /* TODO */
     #elif defined(Q_OS_MAC)
         /* TODO */
     #endif
-    pluginsDir.cd("tools");
+    plugins_dir.cd("tools");
 
-    foreach (QString fileName, pluginsDir.entryList(QDir::Files)) {
-        QPluginLoader loader(pluginsDir.absoluteFilePath(fileName));
+    foreach (QString file_name, plugins_dir.entryList(QDir::Files)) {
+        QPluginLoader loader(plugins_dir.absoluteFilePath(file_name));
         QObject *plugin = loader.instance();
-        if (plugin) {
-            ToolInterface *itool = qobject_cast<ToolInterface *>(plugin);
-            if (itool)
-                addToMenu(plugin, itool->toolNames(), 
-                          toolMenu, SLOT(addTab()), toolActionGroup);
-            pluginFileNames += fileName;
+        if (plugin != NULL) {
+            tool_interface_t *i_tool = qobject_cast<tool_interface_t *>(plugin);
+            if (i_tool)
+                add_to_menu(plugin, i_tool->tool_names(), 
+                            tool_menu, SLOT(add_tab()), tool_action_group);
+            plugin_file_names += file_name;
         }
     }
 }
 
 /* Private
-   Adds a tool to toolsMenu
-*/
-void MainWindow::addToMenu(QObject *plugin, const QStringList &texts,
-                           QMenu *menu, const char *member,
-                           QActionGroup *actionGroup)
+ * Adds a tool to toolsMenu
+ */
+void 
+main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
+                                QMenu *menu, const char *member,
+                                QActionGroup *action_group)
 {
     foreach (QString text, texts) {
         QAction *action = new QAction(text, plugin);
-        connect(action, SIGNAL(triggered()), this, member);
+        connect(action, SIGNAL(triggered()), 
+                this, member);
         menu->addAction(action);
 
-        if (actionGroup) {
+        if (action_group != NULL) {
             action->setCheckable(true);
-            actionGroup->addAction(action);
+            action_group->addAction(action);
         }
     }
 }
 /* Private Slot
-   Creates a new instance of a tool
-   and displays it in the tab interface
-*/
-void MainWindow::addTab() {
+ * Creates a new instance of a tool
+ * and displays it in the tab interface
+ */
+void 
+main_window_t::add_tab(void) 
+{
     QAction *action = qobject_cast<QAction *>(sender());
-    ToolBase *tool = qobject_cast<ToolBase *>
-                       (qobject_cast<ToolInterface *>
-                         (action->parent())->createInstance());
-    const QString toolName = action->text();
+    tool_base_t *tool = qobject_cast<tool_base_t *>(
+                            qobject_cast<tool_interface_t *>(
+                                action->parent())->create_instance());
+    const QString tool_name = action->text();
 
-    tabArea->addTab(tool, toolName);
+    tab_area->addTab(tool, tool_name);
 }

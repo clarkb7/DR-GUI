@@ -27,73 +27,105 @@ class QPushButton;
 class QLineEdit;
 class QGridLayout;
 
-struct snapshotListing {
-    QVector<int> assocCallstacks;
-    int snapshotNum;
+struct snapshot_listing {
+    QVector<int> assoc_callstacks;
+    int snapshot_num;
     unsigned long tot_mallocs,
                   tot_bytes_asked_for,
                   tot_bytes_usable,
                   tot_bytes_occupied,
-                  numTicks;
+                  num_ticks;
 };
 
-class DR_Heapstat_Graph;
+class dr_heapstat_graph_t;
 
-class DR_Heapstat : public ToolBase,
-                    public ToolInterface {
+class dr_heapstat_t : public tool_base_t,
+                      public tool_interface_t 
+{
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.DR-GUI.ToolInterface" FILE "DR_Heapstat.json")
-    Q_INTERFACES(ToolInterface)
+    Q_INTERFACES(tool_interface_t)
 
 public:
-    DR_Heapstat();
-    QStringList toolNames() const;
-    DR_Heapstat *createInstance();
+    dr_heapstat_t();
+
+    ~dr_heapstat_t();
+
+    QStringList 
+    tool_names(void) const;
+
+    dr_heapstat_t *
+    create_instance();
 
 private slots:
-    void loadResults();
-    void fillCallstacksTable();
-    void logDirTextChangedSlot();
-    void loadSettings();
-    void loadFramesTextEdit(int currentRow, int currentColumn, 
-                            int previousRow, int previousColumn);
-    void drawSnapshotGraph();
+    void 
+    load_results(void);
+
+    void 
+    fill_callstacks_table(int snapshot);
+
+    void 
+    log_dir_text_changed_slot(void);
+
+    void 
+    load_settings(void);
+
+    void 
+    load_frames_text_edit(int current_row, int current_column, 
+                          int previous_row, int previous_column);
+
+    void 
+    draw_snapshot_graph(void);
+
+    void 
+    change_lines(void);
+
 private:
-    void createActions();
-    void createLayout();
-    bool dr_checkDir(QDir dir);
-    bool dr_checkFile(QFile& file);
-    void readLogData();
+    void 
+    create_actions(void);
+
+    void 
+    create_layout(void);
+
+    bool 
+    dr_check_dir(QDir dir);
+
+    bool 
+    dr_check_file(QFile& file);
+
+    void 
+    read_log_data(void);
 
     /* GUI */
-    QGraphicsView *graphView;
-    QGraphicsScene *graphScene;
+    QGraphicsView *graph_view;
+    QGraphicsScene *graph_scene;
 
-    QTableWidget *callstacksTable;
-    QTextEdit *framesTextEdit;
-    QPushButton *prevFrameButton;
-    QPushButton *nextFrameButton;
+    QTableWidget *callstacks_table;
+    QTextEdit *frames_text_edit;
+    QPushButton *prev_frame_button;
+    QPushButton *next_frame_button;
 
-    QLineEdit *logDirLineEdit;
-    bool logDirTextChanged;
-    QPushButton *loadResultsButton;
+    QLineEdit *log_dir_line_edit;
+    bool log_dir_text_changed;
+    QPushButton *load_results_button;
 
-    QString logDirLoc;
+    QString log_dir_loc;
 
-    QGridLayout *leftSide;
-    DR_Heapstat_Graph *snapshotGraph;
+    QGridLayout *left_side;
+    dr_heapstat_graph_t *snapshot_graph;
+    QPushButton *reset_graph_zoom_button;
 
     /* Data */
-    struct callstackListing {
-        QStringList frameData;
-        unsigned long  callstackNum,
+    struct callstack_listing {
+        QStringList frame_data;
+        unsigned long  callstack_num,
                        instances, 
                        bytes_asked_for,
                        extra_usable,
                        extra_occupied;
     };
-    QVector<struct callstackListing*> callstacks;
-    QVector<struct snapshotListing*> snapshots;
+    QVector<struct callstack_listing*> callstacks;
+    QVector<struct snapshot_listing*> snapshots;
 };
 
 #endif

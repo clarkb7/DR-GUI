@@ -1,6 +1,5 @@
 TEMPLATE      = lib
 CONFIG       += plugin
-DEFINES      += QT_NO_DEBUG_OUTPUT
 QT           += widgets
 INCLUDEPATH  += ../../
 HEADERS       = ../toolbase.h \

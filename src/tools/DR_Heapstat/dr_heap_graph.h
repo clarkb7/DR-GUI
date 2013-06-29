@@ -15,32 +15,112 @@
 #ifndef DR_HEAP_GRAPH_H
 #define DR_HEAP_GRAPH_H
 
-class QWidget;
+#include <QWidget>
 
-class DR_Heapstat_Graph : public QWidget {
+class dr_heapstat_graph_t : public QWidget 
+{
+    Q_OBJECT
 public:
-    DR_Heapstat_Graph(QVector<struct snapshotListing*>* vec);
-protected:
-    void paintEvent(QPaintEvent *event);
-private:
-    void setHeapData(QVector<struct snapshotListing*>* vec);
-    void drawEmptyGraph(QPainter *painter);
-    void drawYAxis(QPainter *painter);
-    void drawXAxis(QPainter *painter);
-    void drawHeapData(QPainter *painter);
-    unsigned long maxHeight();
-    unsigned long maxWidth();
-    qreal yAxisWidth();
-    qreal xAxisHeight();
-    qreal dataPointY(unsigned long y);
-    qreal dataPointX(int x);
+    dr_heapstat_graph_t(QVector<struct snapshot_listing *> *vec);
 
-    QVector<struct snapshotListing*>* snapshots;
-    qreal graphOuterMargin;
-    QString maximumValue;
-    qreal textWidth;
-    qreal textHeight;
-    /* TODO make max vars, func expensive*/
+public slots:
+    void 
+    refresh_lines(int line);
+    
+    void 
+    reset_graph_zoom(void);
+
+signals:
+    void 
+    highlight_changed(int new_snapshot);
+
+protected:
+    void 
+    paintEvent(QPaintEvent *event);
+    
+    void 
+    resizeEvent(QResizeEvent *event);
+    
+    void 
+    mousePressEvent(QMouseEvent *event);
+    
+    void 
+    mouseReleaseEvent(QMouseEvent *event);
+    
+    void 
+    mouseMoveEvent(QMouseEvent *event);
+
+private:
+    int 
+    highlighted_snapshot(void);
+    
+    void 
+    set_heap_data(QVector<struct snapshot_listing *> *vec);
+    
+    void 
+    draw_empty_graph(QPainter *painter);
+    
+    void 
+    draw_y_axis(QPainter *painter);
+    
+    void 
+    draw_x_axis(QPainter *painter);
+    
+    void 
+    draw_helper(QPainter *painter, qreal total_percent, 
+               QPoint *prev_point, unsigned long *data);
+    
+    void 
+    draw_heap_data(QPainter *painter);
+    
+    void 
+    draw_selection(QPainter *painter);
+    
+    unsigned long 
+    max_height(void);
+    
+    void 
+    max_width(void);
+    
+    qreal 
+    y_axis_width(void);
+    
+    qreal 
+    x_axis_height(void);
+    
+    qreal 
+    data_point_y(unsigned long y);
+    
+    qreal 
+    data_point_x(int x);
+
+    /* Data */
+    QVector<struct snapshot_listing*> snapshots;
+
+    /* Graph Boundaries */
+    qreal graph_outer_margin;
+    QString maximum_value;
+    unsigned long width_max;
+    unsigned long height_max;
+    qreal text_width;
+    qreal text_height;
+    qreal left_bound;
+    qreal right_bound;
+
+    /* Selection/zoom */
+    bool mouse_pressed;
+    QPoint first_point;
+    QPoint last_point;
+    qreal view_start_percent;
+    qreal view_end_percent;
+
+    /* snapshot viewing */
+    QPoint highlighted_point;
+
+    /* lines */
+    bool mem_alloc_line;
+    bool padding_line;
+    bool headers_line;
 };
 
 #endif

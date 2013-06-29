@@ -14,48 +14,63 @@
 **
 **************************************************************************/
 
-#ifndef TOOLBASE_H
-#define TOOLBASE_H
+#ifndef TOOL_BASE_H
+#define TOOL_BASE_H
 
 #include <QWidget>
 #include <QtPlugin>
 
 class QMenu;
 
-class ToolBase : public QWidget
+class tool_base_t : public QWidget
 {
     Q_OBJECT
 
 public:
-    ToolBase();
-    ToolBase(QWidget *parent);
+    tool_base_t(void);
 
-    QString userFriendlyCurrentFile();
-    QString currentFile() { return curFile; }
+    tool_base_t(QWidget *parent);
+
+    QString 
+    user_friendly_current_file();
+    
+    QString 
+    current_file() { return cur_file; }
 
 protected:
-    void closeEvent(QCloseEvent *event);
+    void 
+    closeEvent(QCloseEvent *event);
 
 private:
-    void setCurrentFile(const QString &fileName);
-    QString strippedName(const QString &fullFileName);
+    void 
+    set_current_file(const QString &file_name);
+    
+    QString 
+    stripped_name(const QString &full_file_name);
 
-    QString curFile;
-    bool isUntitled;
+    QString cur_file;
+    bool is_untitled;
+
 };
 
 #endif
 
-#ifndef TOOLINTERFACE_H
-#define TOOLINTERFACE_H
+#ifndef TOOL_INTERFACE_H
+#define TOOL_INTERFACE_H
 
-class ToolInterface {
+class tool_interface_t 
+{
 public:
-    virtual QStringList toolNames() const = 0;
-    virtual QObject* createInstance() = 0;
+    virtual 
+    QStringList tool_names() const = 0;
+    
+    virtual 
+    QObject *create_instance() = 0;
+
 };
 
 #define ToolInterface_iid "org.DR-GUI.ToolInterface"
 
-Q_DECLARE_INTERFACE(ToolInterface, ToolInterface_iid)
+Q_DECLARE_INTERFACE(tool_interface_t, ToolInterface_iid)
+
 #endif
