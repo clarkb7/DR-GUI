@@ -16,6 +16,7 @@
 #define DR_HEAP_GRAPH_H
 
 #include <QWidget>
+#include <QPicture>
 
 class dr_heapstat_graph_t : public QWidget 
 {
@@ -51,7 +52,7 @@ protected:
     mouseMoveEvent(QMouseEvent *event);
 
 private:
-    int 
+    void 
     highlighted_snapshot(void);
     
     void 
@@ -92,7 +93,10 @@ private:
     data_point_y(unsigned long y);
     
     qreal 
-    data_point_x(int x);
+    data_point_x(qreal x);
+
+    void
+    draw_view_cursor(QPainter *painter);
 
     /* Data */
     QVector<struct snapshot_listing*> snapshots;
@@ -116,8 +120,11 @@ private:
 
     /* snapshot viewing */
     QPoint highlighted_point;
+    int current_snapshot_num;
 
     /* lines */
+    QPicture current_graph;
+    bool current_graph_modified;
     bool mem_alloc_line;
     bool padding_line;
     bool headers_line;

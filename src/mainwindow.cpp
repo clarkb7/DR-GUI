@@ -401,6 +401,7 @@ main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
         }
     }
 }
+
 /* Private Slot
  * Creates a new instance of a tool
  * and displays it in the tab interface

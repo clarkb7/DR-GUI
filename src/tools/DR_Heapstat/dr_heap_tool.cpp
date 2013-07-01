@@ -325,11 +325,10 @@ dr_heapstat_t::read_log_data(void)
                                                                     .toInt();
                 this_callstack->extra_usable = callstack_mem_data.at(3).toInt()
                                                + this_callstack->
-                                                               bytes_asked_for;
+                                                                bytes_asked_for;
                 this_callstack->extra_occupied = callstack_mem_data.at(4)
-                                                                    .toInt()
-                                                 + this_callstack->
-                                                                 extra_usable;
+                                                                   .toInt()
+                                                 + this_callstack->extra_usable;
                 /* ensure proper counting */
                 int instance_count = this_callstack->instances;
                 while(instance_count > 1) { 
@@ -349,7 +348,7 @@ dr_heapstat_t::read_log_data(void)
     }
     qDebug() << "INFO: snapshot.log read";
     /* Default to 0 */
-    fill_callstacks_table(0);
+    fill_callstacks_table(1);
     draw_snapshot_graph();
 }
 
@@ -374,20 +373,14 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     callstacks_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     callstacks_table->setSelectionMode(QAbstractItemView::SingleSelection);
     callstacks_table->verticalHeader()->hide();
+    callstacks_table->horizontalHeader()->setSectionResizeMode(
+                                                 QHeaderView::ResizeToContents);
     callstacks_table->horizontalHeader()->setSectionResizeMode(1, 
-                                                      QHeaderView::Stretch);
-    /* resize to contents */
-    for(int i = 0; i < 5; i++) {
-        if (i == 1) /* already set */{
-            continue;
-        }
-        callstacks_table->horizontalHeader()->setSectionResizeMode(i,
-                                             QHeaderView::ResizeToContents);
-    }
+                                                          QHeaderView::Stretch);
 
     /* Put data into callstack_table */
     int row_count = 0;
-    foreach(int callstack, snapshots.at(snapshot)->assoc_callstacks) {
+    foreach(int callstack, snapshots.at(snapshot - 1)->assoc_callstacks) {
         callstacks_table->insertRow(row_count);
         /* Callstack number */
         QTableWidgetItem *num = new QTableWidgetItem;
@@ -411,6 +404,8 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
         callstacks_table->setItem(row_count,4,headers);
 
     }
+    /* Select first row */
+    callstacks_table->setCurrentCell(0,0);
 }
 
 /* Public

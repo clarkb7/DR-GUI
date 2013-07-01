@@ -16,6 +16,7 @@
 
 #include <QWidget>
 #include <QPainter>
+#include <QPicture>
 #include <QStyleOptionGraphicsItem>
 #include <QDebug>
 #include <QMouseEvent>
@@ -62,9 +63,10 @@ dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec)
 
     view_start_percent = 0;
     view_end_percent = 100;
-
+    current_snapshot_num = 1;
     highlighted_point = QPoint(0,0);
-    mem_alloc_line = padding_line = headers_line = true;
+    current_graph_modified = mem_alloc_line = padding_line 
+                           = headers_line = true;
 
     update();
 }
@@ -89,12 +91,17 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
     if (snapshots.isEmpty() == true)
         draw_empty_graph(&painter);
     else {
-        draw_x_axis(&painter);
-        draw_y_axis(&painter);
-        draw_heap_data(&painter);
+        if(current_graph_modified == true) {
+            QPainter data_painter(&current_graph);
+            draw_x_axis(&data_painter);
+            draw_y_axis(&data_painter);
+            draw_heap_data(&data_painter);
+            data_painter.end();
+            current_graph_modified = false;
+        }
+        painter.drawPicture(0,0,current_graph);
         draw_selection(&painter);
-        painter.drawLine(QPoint(highlighted_point.x(),0),
-                         QPoint(highlighted_point.x(),height()));
+        draw_view_cursor(&painter);
     }
 }
 
@@ -104,7 +111,6 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
 unsigned long 
 dr_heapstat_graph_t::max_height(void) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::max_height(void)";
     unsigned long height = 0;
     if (snapshots.isEmpty() == false) {
         foreach(struct snapshot_listing *snapshot, snapshots) {
@@ -121,7 +127,6 @@ dr_heapstat_graph_t::max_height(void)
 void 
 dr_heapstat_graph_t::max_width(void) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::max_width(void)";
     unsigned long width = 0;
     width_max = width;
     if (snapshots.isEmpty() == false) {
@@ -138,7 +143,6 @@ dr_heapstat_graph_t::max_width(void)
 qreal 
 dr_heapstat_graph_t::y_axis_width(void) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::y_axis_width(void)";
     return text_width + 5;
 }
 
@@ -149,7 +153,6 @@ dr_heapstat_graph_t::y_axis_width(void)
 qreal 
 dr_heapstat_graph_t::x_axis_height(void) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::x_axis_height(void)";
     return text_height + 5;
 }
 
@@ -157,11 +160,11 @@ dr_heapstat_graph_t::x_axis_height(void)
  * Calculates x-coord for given data
  */
 qreal 
-dr_heapstat_graph_t::data_point_x(int x) 
+dr_heapstat_graph_t::data_point_x(qreal x) 
 {
     qDebug() << "INFO: Entering dr_heapstat_graph_t::data_point_x(int x)";
     int max_x = width() - y_axis_width() - 2 * graph_outer_margin;
-    return x * (max_x) / (view_end_percent - view_start_percent);
+    return x * (max_x) / (double)(view_end_percent - view_start_percent);
 }
 
 /* Private
@@ -224,14 +227,19 @@ dr_heapstat_graph_t::draw_x_axis(QPainter *painter)
                       QPointF(x_axis_width, x_axis_y));
 
     qreal x_axis_mark = x_axis_x;
+    qreal mark_width;
+    qreal percent_diff = (view_end_percent - view_start_percent);
     /* Draw tallies based on % */
-    for(qreal i = 0; i < (view_end_percent - view_start_percent); i++) {
+    for(qreal i = 0; i <= percent_diff; i++) {
+        mark_width = x_axis_y - GRAPH_MARK_WIDTH;
+        if ((int)i % (int)round(percent_diff / 4) == 0) 
+            mark_width -= 2;
         painter->drawLine(QPointF(x_axis_mark, x_axis_y), 
-                          QPointF(x_axis_mark, x_axis_y - GRAPH_MARK_WIDTH));
+                          QPointF(x_axis_mark, mark_width));
 
         /* Adjust count */
-        x_axis_mark += (x_axis_width-x_axis_x) / 
-                       (view_end_percent - view_start_percent - 1);
+        x_axis_mark += (x_axis_width-x_axis_x)
+                        / percent_diff;
     }
 
     painter->restore();
@@ -263,9 +271,9 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
     unsigned long cur_value = 0;
     unsigned long max_val = maximum_value.toULong();
     int num_tabs = 10; //TODO: Use preference
-    for (int count = 0; count < num_tabs;++count) {
+    for (int count = 0; count <= num_tabs; count++) {
         /* Ensure max is correct */
-        if (count == (num_tabs - 1)) {
+        if (count == num_tabs) {
             cur_value = max_val;
             y_axis_mark = y_axis_height;
         }
@@ -283,8 +291,8 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
                           QPointF(y_axis_x, y_axis_mark));
 
         /* Adjust counts */
-        y_axis_mark += (y_axis_height-y_axis_y) / (num_tabs - 1);
-        cur_value += max_val / (double)(num_tabs - 1);
+        y_axis_mark += (y_axis_height - y_axis_y) / (double)num_tabs;
+        cur_value += max_val / (double)num_tabs;
     }
     painter->restore();
 }
@@ -340,8 +348,8 @@ dr_heapstat_graph_t::draw_heap_data(QPainter *painter)
         painter->setBrush(data_point_brush);
         painter->setPen(data_point_pen);
 
-        total_percent += round((snapshot->num_ticks / ((double)width_max)) 
-                               * 100);
+        total_percent += (snapshot->num_ticks / ((double)width_max)) 
+                         * 100;
         if (total_percent >= view_start_percent &&
             total_percent <= view_end_percent) {
             if (mem_alloc_line == true) {
@@ -394,10 +402,18 @@ dr_heapstat_graph_t::draw_selection(QPainter *painter)
 void 
 dr_heapstat_graph_t::mousePressEvent(QMouseEvent *event) 
 {
+    qreal x_val = event->pos().x();
+    /* Check bounds */
+    if (x_val < left_bound) {
+        x_val = left_bound;
+    } else if (x_val > right_bound) {
+        x_val = right_bound;
+    }
+    /* Handle event */
     if (event->button() == Qt::RightButton) {
         mouse_pressed = true;
         first_point = event->pos();  
-        first_point.setX(event->pos().x()-left_bound);      
+        first_point.setX(x_val - left_bound);      
     }
 }
 
@@ -408,26 +424,21 @@ dr_heapstat_graph_t::mousePressEvent(QMouseEvent *event)
 void 
 dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event) 
 {
-    /* FIXME: wrong numbers sometimes */
     if (event->button() == Qt::RightButton) {
         /* set vars to adjust graph
-           then adjust graph */
-        qDebug() << first_point.x() << " " << last_point.x();
-        qDebug() << right_bound-left_bound;
-
+         * then adjust graph 
+         */
         qreal temp_start = view_start_percent;
         qreal temp_end = view_end_percent;
+
         qreal bound_diff = (right_bound - left_bound);
-        view_start_percent = (first_point.x() / (bound_diff)) * 100;
-        view_start_percent = temp_start + (temp_end - temp_start) 
-                                        * (view_start_percent / 100);
-        view_end_percent = (last_point.x() / (bound_diff)) * 100;
+        qreal percent_diff = (temp_end - temp_start);
 
-        qDebug() << view_end_percent << (((int)view_end_percent % 100)/100);
+        view_start_percent = temp_start + (first_point.x() / (bound_diff)) 
+                                          * percent_diff;
+        view_end_percent = temp_start + (last_point.x() / (bound_diff)) 
+                                        * percent_diff;
 
-        view_end_percent = temp_end - (temp_end - temp_start) 
-                                    * (((int)view_end_percent % 100)
-                                    / (double)100);
         /* switch if user went right to left */                            
         if (first_point.x() > last_point.x()) {
             qreal temp = view_start_percent;
@@ -435,9 +446,7 @@ dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event)
             view_end_percent = temp;
         }
 
-        qDebug() << view_start_percent << " " << view_end_percent 
-                 << " " << temp_start << " " << temp_end;
-
+        current_graph_modified = true;
         /* reset selection info */
         mouse_pressed = false;
         first_point.setX(0);
@@ -466,14 +475,13 @@ dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event)
     /* For selection zoom */
     if (event->buttons() & Qt::RightButton) {
         last_point = QPoint(x_val-left_bound,height());
-        update();
     } /* for snapshot highlighting */ 
     else if (event->buttons() & Qt::LeftButton) {
         highlighted_point = event->pos();
         highlighted_point.setX(x_val-left_bound);
-        update();
         highlighted_snapshot();
     }
+        update();
 }
 
 /* Protected
@@ -485,6 +493,7 @@ dr_heapstat_graph_t::resizeEvent(QResizeEvent *event)
     /* dependent on width */
     right_bound = left_bound + width() - y_axis_width() - 
                   2 * graph_outer_margin;
+    current_graph_modified = true;
 }
 
 /* Public slots
@@ -506,30 +515,42 @@ dr_heapstat_graph_t::refresh_lines(int line)
         default:
             break;
     }
+    current_graph_modified = true;
     update();
 }
 
 /* Private
  * Finds which snapshot to highlight according to slider position
  */
-int 
+void 
 dr_heapstat_graph_t::highlighted_snapshot(void) 
 {
-    qreal total_percent_lesser = 0;
-    qreal total_percent_greater = 0;
-    qreal highlight_percent = highlighted_point.x() / (right_bound-left_bound)
-                              * 100;
+    qreal total_percent_lesser = view_start_percent;
+    qreal total_percent_greater = view_start_percent;
+    qreal total_percent = 0;
+    qreal percent_diff = view_end_percent - view_start_percent;
+    /* Cursor */
+    qreal highlight_percent = view_start_percent + (highlighted_point.x() 
+                              / (double)(right_bound-left_bound)) 
+                              * percent_diff;
+    highlight_percent = data_point_x(highlight_percent-view_start_percent);
+
     foreach(struct snapshot_listing* snapshot, snapshots) {
-        total_percent_greater += round((snapshot->num_ticks / 
-                                       ((double)width_max)) * 100);
+        /* Snapshot locs */
+        total_percent += (snapshot->num_ticks 
+                          / ((double)width_max)) * 100;
+        total_percent_greater = data_point_x(total_percent 
+                                              - view_start_percent);
+        /* If found */
         if (highlight_percent >= total_percent_lesser &&
             highlight_percent <= total_percent_greater) {
             emit highlight_changed(snapshot->snapshot_num);
-            return snapshot->snapshot_num;
+            current_snapshot_num = snapshot->snapshot_num;
+            return;
         }
         total_percent_lesser = total_percent_greater;
     }
-    return 0;
+    return;
 }
 
 /* Public slots
@@ -540,5 +561,29 @@ dr_heapstat_graph_t::reset_graph_zoom(void)
 {
     view_start_percent = 0;
     view_end_percent = 100;
+    current_graph_modified = true;
     update();
+}
+
+/* Private
+ * draws view cursor
+ */
+void
+dr_heapstat_graph_t::draw_view_cursor(QPainter *painter) {
+    painter->save();
+    /* draw cursor line */
+    painter->drawLine(QPoint(highlighted_point.x(),0),
+                      QPoint(highlighted_point.x(),height()));
+    /* draw snapshot num */
+    /* fix scale for text, it appears upside down */
+    painter->save();
+    painter->scale(1,-1);
+    painter->drawText(QRectF(highlighted_point.x() - 3 - text_width,
+                             -(height() - 1.5 * graph_outer_margin),
+                             text_width,
+                             text_height),
+                      "#" + QString::number(current_snapshot_num),
+                      QTextOption(Qt::AlignRight));
+    painter->restore();
+    painter->restore();
 }

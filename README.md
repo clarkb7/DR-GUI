@@ -8,7 +8,7 @@ See COPYRIGHT for license details.
 
 =================         Purpose         =================
 
-To provide a GUI for Dynamorio and it's extensions.  
+To provide a GUI for Dynamorio and its extensions.  
 Currently in progress:  
 * Dr. Memory  
 * Dr. Heapstat  
