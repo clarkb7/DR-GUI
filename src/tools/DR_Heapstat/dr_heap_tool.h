@@ -15,7 +15,7 @@
 #ifndef DR_HEAP_TOOL_H
 #define DR_HEAP_TOOL_H
 
-#include "tools/toolbase.h"
+#include <QWidget>
 
 class QGraphicsView;
 class QGraphicsScene;
@@ -27,35 +27,22 @@ class QPushButton;
 class QLineEdit;
 class QGridLayout;
 
-struct snapshot_listing {
-    QVector<int> assoc_callstacks;
-    int snapshot_num;
-    unsigned long tot_mallocs,
-                  tot_bytes_asked_for,
-                  tot_bytes_usable,
-                  tot_bytes_occupied,
-                  num_ticks;
-};
-
 class dr_heapstat_graph_t;
+struct options_t;
+struct snapshot_listing;
+struct callstack_listing;
 
-class dr_heapstat_t : public tool_base_t,
-                      public tool_interface_t 
+class dr_heapstat_t : public QWidget
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.DR-GUI.ToolInterface" FILE "DR_Heapstat.json")
-    Q_INTERFACES(tool_interface_t)
 
 public:
-    dr_heapstat_t();
+    dr_heapstat_t(options_t *options_);
 
-    ~dr_heapstat_t();
+    ~dr_heapstat_t(void);
 
-    QStringList 
-    tool_names(void) const;
-
-    dr_heapstat_t *
-    create_instance();
+    void
+    update_settings(void);
 
 private slots:
     void 
@@ -66,9 +53,6 @@ private slots:
 
     void 
     log_dir_text_changed_slot(void);
-
-    void 
-    load_settings(void);
 
     void 
     load_frames_text_edit(int current_row, int current_column, 
@@ -97,9 +81,6 @@ private:
     read_log_data(void);
 
     /* GUI */
-    QGraphicsView *graph_view;
-    QGraphicsScene *graph_scene;
-
     QTableWidget *callstacks_table;
     QTextEdit *frames_text_edit;
     QPushButton *prev_frame_button;
@@ -116,16 +97,11 @@ private:
     QPushButton *reset_graph_zoom_button;
 
     /* Data */
-    struct callstack_listing {
-        QStringList frame_data;
-        unsigned long  callstack_num,
-                       instances, 
-                       bytes_asked_for,
-                       extra_usable,
-                       extra_occupied;
-    };
-    QVector<struct callstack_listing*> callstacks;
-    QVector<struct snapshot_listing*> snapshots;
+    QVector<callstack_listing *> callstacks;
+    QVector<snapshot_listing *> snapshots;
+
+    /* Options */
+    options_t *options;
 };
 
 #endif

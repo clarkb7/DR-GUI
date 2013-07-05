@@ -15,6 +15,7 @@
 #include <QtWidgets>
 #include <QActionGroup>
 
+#include "options/options_window.h"
 #include "mainwindow.h"
 #include "tools/toolbase.h"
 
@@ -185,6 +186,8 @@ main_window_t::create_actions(void)
 
     /* Tools */
     tool_action_group = new QActionGroup(this);
+    opt_win = new options_window_t(tool_action_group);
+
 }
 
 /* Private
@@ -280,7 +283,9 @@ main_window_t::active_tool_base(void)
 void 
 main_window_t::show_preferences_dialog(void) 
 {
-    /* Not implemented yet */
+    if (opt_win != NULL) {
+        opt_win->display();
+    }
 }
 
 /* Private Slot
@@ -372,11 +377,15 @@ main_window_t::load_tools(void)
         QPluginLoader loader(plugins_dir.absoluteFilePath(file_name));
         QObject *plugin = loader.instance();
         if (plugin != NULL) {
-            tool_interface_t *i_tool = qobject_cast<tool_interface_t *>(plugin);
+            tool_interface_t *i_tool;
+            i_tool = qobject_cast<tool_interface_t *>(plugin);
             if (i_tool)
                 add_to_menu(plugin, i_tool->tool_names(), 
                             tool_menu, SLOT(add_tab()), tool_action_group);
             plugin_file_names += file_name;
+        } else {
+               QMessageBox::about(this, tr("About DR-GUI"),
+                                  loader.errorString());
         }
     }
 }
@@ -386,8 +395,8 @@ main_window_t::load_tools(void)
  */
 void 
 main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
-                                QMenu *menu, const char *member,
-                                QActionGroup *action_group)
+                           QMenu *menu, const char *member,
+                           QActionGroup *action_group)
 {
     foreach (QString text, texts) {
         QAction *action = new QAction(text, plugin);
@@ -410,9 +419,8 @@ void
 main_window_t::add_tab(void) 
 {
     QAction *action = qobject_cast<QAction *>(sender());
-    tool_base_t *tool = qobject_cast<tool_base_t *>(
-                            qobject_cast<tool_interface_t *>(
-                                action->parent())->create_instance());
+    QWidget *tool = qobject_cast<tool_interface_t *>(
+                                action->parent())->create_instance();
     const QString tool_name = action->text();
 
     tab_area->addTab(tool, tool_name);

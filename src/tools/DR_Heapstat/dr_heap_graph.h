@@ -18,11 +18,18 @@
 #include <QWidget>
 #include <QPicture>
 
+struct options_t;
+struct snapshot_listing;
+
 class dr_heapstat_graph_t : public QWidget 
 {
     Q_OBJECT
 public:
-    dr_heapstat_graph_t(QVector<struct snapshot_listing *> *vec);
+    dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
+                        options_t *options_);
+    
+    bool
+    is_null(void);
 
 public slots:
     void 
@@ -30,6 +37,9 @@ public slots:
     
     void 
     reset_graph_zoom(void);
+
+    void
+    update_settings();
 
 signals:
     void 
@@ -56,7 +66,7 @@ private:
     highlighted_snapshot(void);
     
     void 
-    set_heap_data(QVector<struct snapshot_listing *> *vec);
+    set_heap_data(QVector<snapshot_listing *> *vec);
     
     void 
     draw_empty_graph(QPainter *painter);
@@ -77,7 +87,7 @@ private:
     void 
     draw_selection(QPainter *painter);
     
-    unsigned long 
+    void
     max_height(void);
     
     void 
@@ -99,7 +109,7 @@ private:
     draw_view_cursor(QPainter *painter);
 
     /* Data */
-    QVector<struct snapshot_listing*> snapshots;
+    QVector<snapshot_listing*> *snapshots;
 
     /* Graph Boundaries */
     qreal graph_outer_margin;
@@ -128,6 +138,9 @@ private:
     bool mem_alloc_line;
     bool padding_line;
     bool headers_line;
+
+    /* Options */
+    options_t *options;
 };
 
 #endif

@@ -35,7 +35,7 @@ public:
     user_friendly_current_file();
     
     QString 
-    current_file() { return cur_file; }
+    current_file(void) { return cur_file; }
 
 protected:
     void 
@@ -58,15 +58,23 @@ private:
 #ifndef TOOL_INTERFACE_H
 #define TOOL_INTERFACE_H
 
-class tool_interface_t 
+#include "options_interface.h"
+
+class tool_interface_t : public QWidget
 {
+    Q_OBJECT
 public:
     virtual 
-    QStringList tool_names() const = 0;
+    QStringList 
+    tool_names() const = 0;
     
     virtual 
-    QObject *create_instance() = 0;
+    QWidget *
+    create_instance(void) = 0;
 
+    virtual
+    options_interface_t *
+    create_options_page(void) = 0;
 };
 
 #define ToolInterface_iid "org.DR-GUI.ToolInterface"

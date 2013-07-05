@@ -2,11 +2,13 @@ QT += widgets
 
 HEADERS       = mainwindow.h \
                 tools/toolbase.h \
+                options/options_window.h
                 
 SOURCES       = main.cpp \
                 mainwindow.cpp \
                 \
                 tools/toolbase.cpp \
+                options/options_window.cpp
                 
 LIBS          = -L./tools
 

@@ -29,6 +29,8 @@ class QSignalMapper;
 class QActionGroup;
 class QPluginLoader;
 
+class options_window_t;
+
 class main_window_t : public QMainWindow
 {
     Q_OBJECT
@@ -117,6 +119,7 @@ private:
 
     QMenu *edit_menu;
     QAction *preferences_act;
+    options_window_t *opt_win;
 
     QMenu *window_menu;
     QAction *close_act;

@@ -23,14 +23,16 @@
 
 #include <cmath>
 
+#include "dr_heap_structures.h"
 #include "dr_heap_tool.h"
 #include "dr_heap_graph.h"
 
 /* Public
  * Constructor
  */
-dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<struct snapshot_listing*> *vec)
-    : graph_outer_margin(10) 
+dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
+                                         options_t *options_)
+    :  snapshots(NULL), graph_outer_margin(10), options(options_)
 {
     qDebug() << "INFO: Entering dr_heapstat_graph_t::dr_heapstat_graph_t"
                 "(QVector<struct snapshot_listing*> *vec)";
@@ -48,9 +50,9 @@ dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec)
                 "(QVector<struct snapshot_listing*> *vec)";
     /* memory should be taken care of by tool */
     if (vec != NULL) {
-        snapshots = *vec;        
+        snapshots = vec;        
     }
-    maximum_value = QString::number(max_height());
+    max_height();
     max_width();
 
     QFontMetrics fm(font());
@@ -88,7 +90,7 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
                        height() - graph_outer_margin);
     painter.scale(1,-1);
 
-    if (snapshots.isEmpty() == true)
+    if (snapshots == NULL || snapshots->isEmpty() == true)
         draw_empty_graph(&painter);
     else {
         if(current_graph_modified == true) {
@@ -98,6 +100,7 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
             draw_heap_data(&data_painter);
             data_painter.end();
             current_graph_modified = false;
+            highlighted_snapshot();
         }
         painter.drawPicture(0,0,current_graph);
         draw_selection(&painter);
@@ -108,17 +111,25 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
 /* Private
  * Calculates max height of y-axis
  */
-unsigned long 
+void 
 dr_heapstat_graph_t::max_height(void) 
 {
+    qDebug() << maximum_value << " " << this;
     unsigned long height = 0;
-    if (snapshots.isEmpty() == false) {
-        foreach(struct snapshot_listing *snapshot, snapshots) {
+    if (snapshots != NULL &&
+        snapshots->isEmpty() == false) {
+        foreach(snapshot_listing *snapshot, *snapshots) {
+            if (options != NULL &&
+                options->hide_first_snapshot == true &&
+                snapshot->snapshot_num == 0) {
+                continue;
+            }
             if (snapshot->tot_bytes_occupied > height)
                 height = snapshot->tot_bytes_occupied;
         }
     }
-    return height;
+    maximum_value = QString::number(height);
+    height_max = height;
 }
 
 /* Private
@@ -129,8 +140,14 @@ dr_heapstat_graph_t::max_width(void)
 {
     unsigned long width = 0;
     width_max = width;
-    if (snapshots.isEmpty() == false) {
-        foreach(struct snapshot_listing *snapshot, snapshots) {
+    if (snapshots != NULL &&
+        snapshots->isEmpty() == false) {
+        foreach(snapshot_listing *snapshot, *snapshots) {
+            if (options != NULL &&
+                options->hide_first_snapshot == true &&
+                snapshot->snapshot_num == 0) {
+                continue;
+            }
             width += snapshot->num_ticks;
         }
     }
@@ -162,7 +179,6 @@ dr_heapstat_graph_t::x_axis_height(void)
 qreal 
 dr_heapstat_graph_t::data_point_x(qreal x) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::data_point_x(int x)";
     int max_x = width() - y_axis_width() - 2 * graph_outer_margin;
     return x * (max_x) / (double)(view_end_percent - view_start_percent);
 }
@@ -173,8 +189,6 @@ dr_heapstat_graph_t::data_point_x(qreal x)
 qreal 
 dr_heapstat_graph_t::data_point_y(unsigned long y) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::data_point_y"
-                "(unsigned long y)";
     int max_y = height() - x_axis_height() - 2 * graph_outer_margin;
     return y * (max_y) / maximum_value.toULong();
 }
@@ -269,8 +283,8 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
     /* Draw scale */
     qreal y_axis_mark = 0;
     unsigned long cur_value = 0;
-    unsigned long max_val = maximum_value.toULong();
-    int num_tabs = 10; //TODO: Use preference
+    unsigned long max_val = height_max;
+    int num_tabs = options->num_vertical_ticks;
     for (int count = 0; count <= num_tabs; count++) {
         /* Ensure max is correct */
         if (count == num_tabs) {
@@ -307,6 +321,15 @@ dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent,
     qreal dp_x = data_point_x(total_percent - view_start_percent);
     qreal dp_y = data_point_y(*data);
     
+    /* square graph */
+    if(options->square_graph == true) {
+        QPoint mid_point(prev_point->x(), dp_y);
+        painter->drawLine(*prev_point, mid_point);
+        painter->drawRect(prev_point->x() - 1.5, dp_y - 1.5, 3, 3);
+        prev_point->setX(mid_point.x());
+        prev_point->setY(mid_point.y());
+    }
+
     QPoint this_point(dp_x, dp_y);
     painter->drawLine(*prev_point, this_point);
     painter->drawRect(dp_x - 1.5, dp_y - 1.5, 3, 3);
@@ -326,18 +349,28 @@ dr_heapstat_graph_t::draw_heap_data(QPainter *painter)
 
     qreal total_percent = 0;
     /* need for each line */
+    int start = 0;
+    if (options->hide_first_snapshot == true)
+        start++;
     QVector<QPoint> prev_points;
     prev_points.append(QPoint(
                            data_point_x(total_percent),
-                           data_point_y(snapshots.at(0)->tot_bytes_asked_for)));
+                           data_point_y(snapshots->at(start)->
+                                                       tot_bytes_asked_for)));
     prev_points.append(QPoint(
                            data_point_x(total_percent),
-                           data_point_y(snapshots.at(0)->tot_bytes_usable)));
+                           data_point_y(snapshots->at(start)->
+                                                       tot_bytes_usable)));
     prev_points.append(QPoint(
                            data_point_x(total_percent),
-                           data_point_y(snapshots.at(0)->tot_bytes_occupied)));
+                           data_point_y(snapshots->at(start)->
+                                                       tot_bytes_occupied)));
 
-    foreach(struct snapshot_listing *snapshot, snapshots) {
+    foreach(snapshot_listing *snapshot, *snapshots) {
+        if (options->hide_first_snapshot == true &&
+            snapshot->snapshot_num == 0) {
+            continue;
+        }
         /* TODO: use preference for color*/
         QBrush data_point_brush(Qt::red);
         QPen data_point_pen(Qt::white, 3, Qt::SolidLine, 
@@ -525,6 +558,8 @@ dr_heapstat_graph_t::refresh_lines(int line)
 void 
 dr_heapstat_graph_t::highlighted_snapshot(void) 
 {
+    if(snapshots == NULL)
+        return;
     qreal total_percent_lesser = view_start_percent;
     qreal total_percent_greater = view_start_percent;
     qreal total_percent = 0;
@@ -535,7 +570,10 @@ dr_heapstat_graph_t::highlighted_snapshot(void)
                               * percent_diff;
     highlight_percent = data_point_x(highlight_percent-view_start_percent);
 
-    foreach(struct snapshot_listing* snapshot, snapshots) {
+    foreach(snapshot_listing *snapshot, *snapshots) {
+        if (options->hide_first_snapshot == true &&
+            snapshot->snapshot_num == 0)
+            continue;
         /* Snapshot locs */
         total_percent += (snapshot->num_ticks 
                           / ((double)width_max)) * 100;
@@ -569,7 +607,8 @@ dr_heapstat_graph_t::reset_graph_zoom(void)
  * draws view cursor
  */
 void
-dr_heapstat_graph_t::draw_view_cursor(QPainter *painter) {
+dr_heapstat_graph_t::draw_view_cursor(QPainter *painter) 
+{
     painter->save();
     /* draw cursor line */
     painter->drawLine(QPoint(highlighted_point.x(),0),
@@ -586,4 +625,16 @@ dr_heapstat_graph_t::draw_view_cursor(QPainter *painter) {
                       QTextOption(Qt::AlignRight));
     painter->restore();
     painter->restore();
+}
+
+
+void
+dr_heapstat_graph_t::update_settings(void)
+{
+    set_heap_data(snapshots);
+}
+
+bool
+dr_heapstat_graph_t::is_null(void) {
+    return snapshots == NULL;
 }

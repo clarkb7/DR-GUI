@@ -31,18 +31,19 @@
 #include <cmath>
 #include <cassert>
 
-#include "dr_heap_tool.h"
+#include "dr_heap_structures.h"
 #include "dr_heap_graph.h"
+#include "dr_heap_tool.h"
 
 /* Public
  * Constructor
  */
-dr_heapstat_t::dr_heapstat_t(void) 
+dr_heapstat_t::dr_heapstat_t(options_t *options_) 
 {
     qDebug() << "INFO: Entering dr_heapstat_t::dr_heapstat_t(void)";
     log_dir_text_changed = false;
     log_dir_loc = "";
-    load_settings();
+    options = options_;
     create_actions();
     create_layout();
 }
@@ -97,7 +98,7 @@ dr_heapstat_t::create_layout(void)
     QLabel *graph_title = new QLabel(QString(tr("Memory consumption over "
                                 "full process lifetime")), this);
     left_side->addWidget(graph_title,0,0);
-    snapshot_graph = new dr_heapstat_graph_t(NULL);
+    snapshot_graph = new dr_heapstat_graph_t(NULL, NULL);
     left_side->addWidget(snapshot_graph,1,0);
     /* zoom reset button */
     reset_graph_zoom_button = new QPushButton("Reset Graph Zoom");
@@ -193,7 +194,7 @@ dr_heapstat_t::load_results(void)
         do {
         test_dir = QFileDialog::getExistingDirectory(this, 
                             tr("Open Directory"),
-                            "/home", //TODO: Use preference
+                            options->def_load_dir, 
                             QFileDialog::ShowDirsOnly);
         } while(dr_check_dir(QDir(log_dir_loc)) == false);
         if (test_dir.isEmpty() == true) {
@@ -249,7 +250,7 @@ dr_heapstat_t::read_log_data(void)
             if (line.contains(QString("LOG END")) == true) {
                 break;
             }
-            struct callstack_listing *this_callstack = new callstack_listing;
+            callstack_listing *this_callstack = new callstack_listing;
             this_callstack->callstack_num = counter;
             counter++;
             /* read in frame data */
@@ -270,11 +271,6 @@ dr_heapstat_t::read_log_data(void)
     qDebug() << "INFO: callstack.log read";
 
     /* Read in snapshot.log data */
-    /* TODO: Make preference to ignore first snapshot (ignored by def now)
-     *        It's usually MUCH larger than the rest of the life cycle
-     *        Won't be necessary when start and finish life-time
-     *        view sliders are implemented
-    */
     /* clear current snapshot data*/
     snapshots.clear();
     if (snapshot_log.open(QFile::ReadOnly)) {
@@ -290,7 +286,7 @@ dr_heapstat_t::read_log_data(void)
             if (line.contains(QString("LOG END")) == true) {
                 break;
             }
-            struct snapshot_listing *this_snapshot = new snapshot_listing;
+            snapshot_listing *this_snapshot = new snapshot_listing;
             this_snapshot->snapshot_num = counter;
             counter++;
             /* get num ticks */
@@ -317,18 +313,18 @@ dr_heapstat_t::read_log_data(void)
             for( unsigned int i = 0; i < this_snapshot->tot_mallocs; ++i) {
                 line = in_log.readLine();
                 QStringList callstack_mem_data = line.split(",");
-                struct callstack_listing *this_callstack 
-                        = callstacks.at(callstack_mem_data.at(0).toInt()-1);
+                callstack_listing *this_callstack; 
+                this_callstack = callstacks.at(callstack_mem_data.at(0)
+                                                                  .toInt()-1);
 
                 this_callstack->instances = callstack_mem_data.at(1).toInt();
                 this_callstack->bytes_asked_for = callstack_mem_data.at(2)
                                                                     .toInt();
                 this_callstack->extra_usable = callstack_mem_data.at(3).toInt()
-                                               + this_callstack->
-                                                                bytes_asked_for;
+                                             + this_callstack->bytes_asked_for;
                 this_callstack->extra_occupied = callstack_mem_data.at(4)
                                                                    .toInt()
-                                                 + this_callstack->extra_usable;
+                                               + this_callstack->extra_usable;
                 /* ensure proper counting */
                 int instance_count = this_callstack->instances;
                 while(instance_count > 1) { 
@@ -338,9 +334,6 @@ dr_heapstat_t::read_log_data(void)
                 this_snapshot->assoc_callstacks.append(this_callstack
                                                        ->callstack_num);
             }
-            if (counter == 1) /* dont add first to list*/{
-                continue;
-            }
             snapshots.append(this_snapshot);
         } while(line.isNull() == false && 
                 line.contains(QString("LOG END")) == false);
@@ -348,7 +341,10 @@ dr_heapstat_t::read_log_data(void)
     }
     qDebug() << "INFO: snapshot.log read";
     /* Default to 0 */
-    fill_callstacks_table(1);
+    int def = 0;
+    if (options->hide_first_snapshot == true)
+        def++;
+    fill_callstacks_table(def);
     draw_snapshot_graph();
 }
 
@@ -365,8 +361,7 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     callstacks_table->setRowCount(0);
     callstacks_table->setColumnCount(5);
     QStringList table_headers;
-    table_headers << tr("Call Stack") << tr("Symbol") << tr("Memory Allocated") 
-                  << tr("+Padding") << tr("+Headers");
+    table_headers << tr("Call Stack") << tr("Symbol") << tr("Memory Allocated")          << tr("+Padding") << tr("+Headers");
     callstacks_table->setHorizontalHeaderLabels(table_headers);
     callstacks_table->setSortingEnabled(true);
     callstacks_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -374,13 +369,13 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     callstacks_table->setSelectionMode(QAbstractItemView::SingleSelection);
     callstacks_table->verticalHeader()->hide();
     callstacks_table->horizontalHeader()->setSectionResizeMode(
-                                                 QHeaderView::ResizeToContents);
+                                                QHeaderView::ResizeToContents);
     callstacks_table->horizontalHeader()->setSectionResizeMode(1, 
-                                                          QHeaderView::Stretch);
+                                                        QHeaderView::Stretch);
 
     /* Put data into callstack_table */
     int row_count = 0;
-    foreach(int callstack, snapshots.at(snapshot - 1)->assoc_callstacks) {
+    foreach(int callstack, snapshots.at(snapshot)->assoc_callstacks) {
         callstacks_table->insertRow(row_count);
         /* Callstack number */
         QTableWidgetItem *num = new QTableWidgetItem;
@@ -408,43 +403,15 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     callstacks_table->setCurrentCell(0,0);
 }
 
-/* Public
- * Returns provided tool-names during loading
- */
-QStringList 
-dr_heapstat_t::tool_names(void) const 
-{
-    qDebug() << "INFO: Entering dr_heapstat_t::tool_names(void)";
-    return QStringList() << "Dr. Heapstat";
-}
-
-/* Public
- * Returns a new instance of the tool
- */
-dr_heapstat_t *
-dr_heapstat_t::create_instance(void) 
-{
-    qDebug() << "INFO: Entering dr_heapstat_t::create_instance(void)";
-    return new dr_heapstat_t;
-}
-
 /* Private Slot
  * Returns provided tool-names during loading
  */
 void 
 dr_heapstat_t::log_dir_text_changed_slot(void) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_t::log_dir_text_changed_slot(void)";
+    qDebug() << "INFO: Entering dr_heapstat_t::log_dir_text_changed_slot"
+                "(void)";
     log_dir_text_changed = true;
-}
-
-/* Private Slot
- * Loads preferences data
- */
-void 
-dr_heapstat_t::load_settings(void) 
-{
-    qDebug() << "INFO: Entering dr_heapstat_t::load_settings(void)";
 }
 
 /* Private
@@ -540,16 +507,18 @@ dr_heapstat_t::draw_snapshot_graph(void)
 {
     qDebug() << "INFO: Entering dr_heapstat_t::draw_snapshot_graph(void)";
     /* remove */
-    left_side->removeWidget(snapshot_graph);
-    delete snapshot_graph;
-    /* create */
-    snapshot_graph = new dr_heapstat_graph_t(&snapshots);
-    left_side->addWidget(snapshot_graph,1,0);
-    connect(snapshot_graph, SIGNAL(highlight_changed(int)),
-            this, SLOT(fill_callstacks_table(int)));
-    connect(reset_graph_zoom_button, SIGNAL(clicked()),
-            snapshot_graph, SLOT(reset_graph_zoom()));
-
+    if (snapshot_graph != NULL && 
+        snapshot_graph->is_null() == true) {
+        left_side->removeWidget(snapshot_graph);
+        delete snapshot_graph;
+        /* create */
+        snapshot_graph = new dr_heapstat_graph_t(&snapshots, options);    
+        left_side->addWidget(snapshot_graph,1,0);
+        connect(snapshot_graph, SIGNAL(highlight_changed(int)),
+                this, SLOT(fill_callstacks_table(int)));
+        connect(reset_graph_zoom_button, SIGNAL(clicked()),
+                snapshot_graph, SLOT(reset_graph_zoom()));
+    }
 }
 
 /* Private Slot
@@ -571,4 +540,13 @@ dr_heapstat_t::change_lines(void)
     if (id != -1) {
         snapshot_graph->refresh_lines(id);
     }
+}
+
+/* Public
+ * Tells the snapshot graph to update after a settings change
+ */
+void
+dr_heapstat_t::update_settings(void)
+{
+    snapshot_graph->update_settings();
 }
