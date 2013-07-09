@@ -1,6 +1,7 @@
 TEMPLATE      = lib
 CONFIG       += plugin
 QT           += widgets
+QMAKE_CXXFLAGS += -g
 INCLUDEPATH  += ../../
 HEADERS       = ../toolbase.h \
                 ../options_interface.h \

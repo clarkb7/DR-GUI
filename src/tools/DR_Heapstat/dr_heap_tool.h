@@ -26,6 +26,10 @@ class QTextEdit;
 class QPushButton;
 class QLineEdit;
 class QGridLayout;
+class QHBoxLayout;
+class QLabel;
+class QVBoxLayout;
+class QCheckBox;
 
 class dr_heapstat_graph_t;
 struct options_t;
@@ -64,6 +68,12 @@ private slots:
     void 
     change_lines(void);
 
+    void
+    show_prev_frame(void);
+
+    void
+    show_next_frame(void);
+
 private:
     void 
     create_actions(void);
@@ -81,24 +91,45 @@ private:
     read_log_data(void);
 
     /* GUI */
-    QTableWidget *callstacks_table;
-    QTextEdit *frames_text_edit;
-    QPushButton *prev_frame_button;
-    QPushButton *next_frame_button;
+    QGridLayout *main_layout;
 
+    QHBoxLayout *controls_layout;
     QLineEdit *log_dir_line_edit;
     bool log_dir_text_changed;
     QPushButton *load_results_button;
 
-    QString log_dir_loc;
-
     QGridLayout *left_side;
+    QLabel *graph_title;
     dr_heapstat_graph_t *snapshot_graph;
     QPushButton *reset_graph_zoom_button;
 
+    QVBoxLayout *check_box_layout;
+    QCheckBox *headers_check_box;
+    QCheckBox *padding_check_box;
+    QCheckBox *mem_alloc_check_box;
+
+    QVBoxLayout *msg_layout;
+    QLabel *msg_title;
+    QTextEdit *messages;
+
+    QGridLayout *right_side;
+    QLabel *right_title;
+    QTableWidget *callstacks_table;
+
+    QHBoxLayout *frame_buttons;
+    QPushButton *prev_frame_button;
+    QLabel *display_label;
+    QPushButton *next_frame_button;
+    
+    QTextEdit *frames_text_edit;
+
+    QString log_dir_loc;
+    
     /* Data */
     QVector<callstack_listing *> callstacks;
     QVector<snapshot_listing *> snapshots;
+    int callstacks_display_page;
+    int current_snapshot_num;
 
     /* Options */
     options_t *options;

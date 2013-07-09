@@ -37,6 +37,12 @@ dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
     qDebug() << "INFO: Entering dr_heapstat_graph_t::dr_heapstat_graph_t"
                 "(QVector<struct snapshot_listing*> *vec)";
     setAttribute(Qt::WA_DeleteOnClose);
+    view_start_percent = 0;
+    view_end_percent = 100;
+    current_snapshot_num = 1;
+    highlighted_point = QPoint(0,0);
+    current_graph_modified = mem_alloc_line = padding_line 
+                           = headers_line = true;
     set_heap_data(vec);
 }
 
@@ -62,13 +68,6 @@ dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec)
     left_bound = graph_outer_margin + text_width + 5;
     right_bound = left_bound + width() - y_axis_width() -
                   2 * graph_outer_margin;   
-
-    view_start_percent = 0;
-    view_end_percent = 100;
-    current_snapshot_num = 1;
-    highlighted_point = QPoint(0,0);
-    current_graph_modified = mem_alloc_line = padding_line 
-                           = headers_line = true;
 
     update();
 }
@@ -114,8 +113,7 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
 void 
 dr_heapstat_graph_t::max_height(void) 
 {
-    qDebug() << maximum_value << " " << this;
-    unsigned long height = 0;
+    qreal height = 0;
     if (snapshots != NULL &&
         snapshots->isEmpty() == false) {
         foreach(snapshot_listing *snapshot, *snapshots) {
@@ -138,8 +136,7 @@ dr_heapstat_graph_t::max_height(void)
 void 
 dr_heapstat_graph_t::max_width(void) 
 {
-    unsigned long width = 0;
-    width_max = width;
+    qreal width = 0;
     if (snapshots != NULL &&
         snapshots->isEmpty() == false) {
         foreach(snapshot_listing *snapshot, *snapshots) {
@@ -187,7 +184,7 @@ dr_heapstat_graph_t::data_point_x(qreal x)
  * Calculates y-coord for given data
  */
 qreal 
-dr_heapstat_graph_t::data_point_y(unsigned long y) 
+dr_heapstat_graph_t::data_point_y(qreal y) 
 {
     int max_y = height() - x_axis_height() - 2 * graph_outer_margin;
     return y * (max_y) / maximum_value.toULong();
@@ -243,10 +240,13 @@ dr_heapstat_graph_t::draw_x_axis(QPainter *painter)
     qreal x_axis_mark = x_axis_x;
     qreal mark_width;
     qreal percent_diff = (view_end_percent - view_start_percent);
+    /* floating point exception check */
+    if (percent_diff < 2.0)
+        percent_diff = 2.0;
     /* Draw tallies based on % */
     for(qreal i = 0; i <= percent_diff; i++) {
         mark_width = x_axis_y - GRAPH_MARK_WIDTH;
-        if ((int)i % (int)round(percent_diff / 4) == 0) 
+        if ((int)i % (int)round(percent_diff / 4.0) == 0) 
             mark_width -= 2;
         painter->drawLine(QPointF(x_axis_mark, x_axis_y), 
                           QPointF(x_axis_mark, mark_width));
@@ -282,8 +282,8 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
 
     /* Draw scale */
     qreal y_axis_mark = 0;
-    unsigned long cur_value = 0;
-    unsigned long max_val = height_max;
+    qreal cur_value = 0;
+    qreal max_val = height_max;
     int num_tabs = options->num_vertical_ticks;
     for (int count = 0; count <= num_tabs; count++) {
         /* Ensure max is correct */
@@ -298,7 +298,7 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
                                  -(y_axis_mark + text_height/2),
                                  text_width,
                                  text_height),
-                          QString::number(cur_value),
+                          QString::number(round(cur_value)),
                           QTextOption(Qt::AlignRight));
         painter->restore();
         painter->drawLine(QPointF(y_axis_x - GRAPH_MARK_WIDTH, y_axis_mark), 
@@ -316,11 +316,24 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
  */
 void 
 dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent, 
-                                QPoint *prev_point, unsigned long *data) 
+                                 QPoint *prev_point, qreal *data,
+                                 bool first) 
 {
     qreal dp_x = data_point_x(total_percent - view_start_percent);
     qreal dp_y = data_point_y(*data);
     
+    /* Place first point at correct loc */
+    if (first == true) {
+        if(options->square_graph == false) {
+            qreal slope = (dp_y - prev_point->y()) / 
+                          (double)(dp_x - prev_point->x());
+            prev_point->setY(slope * (0 - prev_point->x()) + prev_point->y());
+        } else {
+            prev_point->setY(dp_y);
+        }
+        prev_point->setX(0);
+    }
+
     /* square graph */
     if(options->square_graph == true) {
         QPoint mid_point(prev_point->x(), dp_y);
@@ -329,6 +342,8 @@ dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent,
         prev_point->setX(mid_point.x());
         prev_point->setY(mid_point.y());
     }
+
+
 
     QPoint this_point(dp_x, dp_y);
     painter->drawLine(*prev_point, this_point);
@@ -349,65 +364,75 @@ dr_heapstat_graph_t::draw_heap_data(QPainter *painter)
 
     qreal total_percent = 0;
     /* need for each line */
-    int start = 0;
-    if (options->hide_first_snapshot == true)
-        start++;
     QVector<QPoint> prev_points;
-    prev_points.append(QPoint(
-                           data_point_x(total_percent),
-                           data_point_y(snapshots->at(start)->
-                                                       tot_bytes_asked_for)));
-    prev_points.append(QPoint(
-                           data_point_x(total_percent),
-                           data_point_y(snapshots->at(start)->
-                                                       tot_bytes_usable)));
-    prev_points.append(QPoint(
-                           data_point_x(total_percent),
-                           data_point_y(snapshots->at(start)->
-                                                       tot_bytes_occupied)));
+    for(int i = 0; i < 3; i++) 
+        prev_points.append(QPoint());
+    /* TODO: use preference for color*/
+    QBrush data_point_brush(Qt::red);
+    QPen data_point_pen(Qt::white, 3, Qt::SolidLine, 
+                        Qt::RoundCap, Qt::RoundJoin);
 
+    if (options->antialiasing_enabled)
+        painter->setRenderHint(QPainter::Antialiasing);
+    painter->setBrush(data_point_brush);
+    painter->setPen(data_point_pen);
+
+    bool first = true;
+    bool last = false;
     foreach(snapshot_listing *snapshot, *snapshots) {
         if (options->hide_first_snapshot == true &&
             snapshot->snapshot_num == 0) {
             continue;
         }
-        /* TODO: use preference for color*/
-        QBrush data_point_brush(Qt::red);
-        QPen data_point_pen(Qt::white, 3, Qt::SolidLine, 
-                            Qt::RoundCap, Qt::RoundJoin);
 
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing);
-        painter->setBrush(data_point_brush);
-        painter->setPen(data_point_pen);
+        total_percent += (snapshot->num_ticks / ((double)width_max)) * 100;
+        if (total_percent < view_start_percent) {
+            prev_points.data()[0] = QPoint(data_point_x(total_percent -
+                                                        view_start_percent),
+                                           data_point_y(snapshot->
+                                                         tot_bytes_asked_for));
+            prev_points.data()[1] = QPoint(data_point_x(total_percent -
+                                                        view_start_percent),
+                                           data_point_y(snapshot->
+                                                         tot_bytes_usable));
+            prev_points.data()[2] = QPoint(data_point_x(total_percent -
+                                                        view_start_percent),
+                                           data_point_y(snapshot->
+                                                         tot_bytes_occupied));
+            continue;
+        } 
 
-        total_percent += (snapshot->num_ticks / ((double)width_max)) 
-                         * 100;
-        if (total_percent >= view_start_percent &&
-            total_percent <= view_end_percent) {
-            if (mem_alloc_line == true) {
-                data_point_pen.setColor(QColor(255, 102, 0));
-                painter->setPen(data_point_pen);
-                draw_helper(painter, total_percent, 
-                            &prev_points.data()[0], 
-                            &snapshot->tot_bytes_asked_for);
-            }
-            if (padding_line == true) {
-                data_point_pen.setColor(QColor(0, 204, 0));
-                painter->setPen(data_point_pen);
-                draw_helper(painter, total_percent, 
-                            &prev_points.data()[1], 
-                            &snapshot->tot_bytes_usable);
-            }
-            if (headers_line == true) {
-                data_point_pen.setColor(QColor(27, 168, 188));
-                painter->setPen(data_point_pen);
-                draw_helper(painter, total_percent, 
-                            &prev_points.data()[2], 
-                            &snapshot->tot_bytes_occupied);
-            }
+        if (last == true) {
+            break;
+        } else if (total_percent > view_end_percent) {
+            last = true;
         }
-        painter->restore();
+
+        if (mem_alloc_line == true) {
+            data_point_pen.setColor(QColor(255, 102, 0));
+            painter->setPen(data_point_pen);
+            draw_helper(painter, total_percent, 
+                        &prev_points.data()[0], 
+                        &snapshot->tot_bytes_asked_for,
+                        first);
+        }
+        if (padding_line == true) {
+            data_point_pen.setColor(QColor(0, 204, 0));
+            painter->setPen(data_point_pen);
+            draw_helper(painter, total_percent, 
+                        &prev_points.data()[1], 
+                        &snapshot->tot_bytes_usable,
+                        first);
+        }
+        if (headers_line == true) {
+            data_point_pen.setColor(QColor(27, 168, 188));
+            painter->setPen(data_point_pen);
+            draw_helper(painter, total_percent, 
+                        &prev_points.data()[2], 
+                        &snapshot->tot_bytes_occupied,
+                        first);
+        }
+        first = false;
     }
     painter->restore();
 }
@@ -478,7 +503,18 @@ dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event)
             view_start_percent = view_end_percent;
             view_end_percent = temp;
         }
-
+        /* floating point exception with diff < 2 
+         * From drawing elongated tallies in draw_x_axis
+         * (i % (int)round(diff / 4))
+         */
+        if (abs(view_start_percent - view_end_percent) < 2.0000) {
+            view_end_percent = view_start_percent + 2.0000;
+        }
+        /* limit */
+        if (view_start_percent >= 98) {
+            view_end_percent = 100;
+            view_start_percent = 98;
+        }
         current_graph_modified = true;
         /* reset selection info */
         mouse_pressed = false;
@@ -523,6 +559,7 @@ dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event)
 void 
 dr_heapstat_graph_t::resizeEvent(QResizeEvent *event) 
 {
+    Q_UNUSED(event);
     /* dependent on width */
     right_bound = left_bound + width() - y_axis_width() - 
                   2 * graph_outer_margin;
@@ -533,17 +570,17 @@ dr_heapstat_graph_t::resizeEvent(QResizeEvent *event)
  * dis/en/ables line drawing
  */
 void 
-dr_heapstat_graph_t::refresh_lines(int line) 
+dr_heapstat_graph_t::refresh_lines(int line, bool state) 
 {
     switch (line) {
         case 0:
-            mem_alloc_line = !mem_alloc_line;
+            mem_alloc_line = state;
             break;
         case 1:
-            padding_line = !padding_line;
+            padding_line = state;
             break;
         case 2:
-            headers_line = !headers_line;
+            headers_line = state;
             break;
         default:
             break;
@@ -631,6 +668,7 @@ dr_heapstat_graph_t::draw_view_cursor(QPainter *painter)
 void
 dr_heapstat_graph_t::update_settings(void)
 {
+    current_graph_modified = true;
     set_heap_data(snapshots);
 }
 

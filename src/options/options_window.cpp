@@ -35,20 +35,20 @@ options_window_t::options_window_t(QActionGroup *tool_action_group_)
     tool_action_group = tool_action_group_;
 
     /* Will list the tool option pages available */
-    tool_page_list = new QListWidget;
+    tool_page_list = new QListWidget(this);
     tool_page_list->setViewMode(QListView::IconMode);
     tool_page_list->setIconSize(QSize(96, 84));
     tool_page_list->setMovement(QListView::Static);
     tool_page_list->setMaximumWidth(140);
     tool_page_list->setSpacing(12);
 
-    tool_page_stack = new QStackedWidget;
+    tool_page_stack = new QStackedWidget(this);
 
     save_button = new QPushButton(tr("Save"));
     connect(save_button, SIGNAL(clicked()),
             this, SLOT(save()));
     
-    close_button = new QPushButton(tr("Close"));
+    close_button = new QPushButton(tr("Close"), this);
     connect(close_button, SIGNAL(clicked()), 
             this, SLOT(close()));
 

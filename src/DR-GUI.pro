@@ -1,5 +1,5 @@
 QT += widgets
-
+QMAKE_CXXFLAGS += -g
 HEADERS       = mainwindow.h \
                 tools/toolbase.h \
                 options/options_window.h

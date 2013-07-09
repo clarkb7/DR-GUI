@@ -40,6 +40,10 @@ signals:
     void
     settings_changed(void);
 
+private slots:
+    void
+    choose_def_load_dir(void);
+    
 private:
     void
     create_layout(void);
@@ -49,6 +53,8 @@ private:
 
     void
     read_settings(void);
+    
+
 
     options_t *options;
 
@@ -56,7 +62,9 @@ private:
     QLineEdit *def_load_dir_line_edit;
     QCheckBox *ignore_first_snapshot_check_box;
     QCheckBox *square_graph_check_box;
+    QCheckBox *antialiasing_check_box;
     QSpinBox *num_tabs_spin_box;
+    QSpinBox *num_callstacks_per_page_spin_box;
 };
 
 #endif

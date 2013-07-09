@@ -30,6 +30,7 @@ class QActionGroup;
 class QPluginLoader;
 
 class options_window_t;
+class tool_interface_t;
 
 class main_window_t : public QMainWindow
 {
@@ -37,7 +38,8 @@ class main_window_t : public QMainWindow
 
 public:
     main_window_t(void);
-    /* Q objects auto deleted when passed 'parent' pointer */
+    ~main_window_t(void);
+
 protected:
     void close_event(QCloseEvent *event);
 
@@ -94,8 +96,8 @@ private:
     void 
     write_settings(void);
     
-    tool_base_t *
-    active_tool_base(void);
+    QWidget *
+    active_tool(void);
     
     void 
     load_tools(void);
@@ -132,6 +134,8 @@ private:
     QAction *about_qt_act;
 
     QMenu *tool_menu;
+
+    QVector<tool_interface_t *> plugins;
 };
 
 #endif

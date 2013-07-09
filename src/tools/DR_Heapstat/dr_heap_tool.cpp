@@ -44,6 +44,8 @@ dr_heapstat_t::dr_heapstat_t(options_t *options_)
     log_dir_text_changed = false;
     log_dir_loc = "";
     options = options_;
+    callstacks_display_page = 0;
+    current_snapshot_num = 0;
     create_actions();
     create_layout();
 }
@@ -54,8 +56,16 @@ dr_heapstat_t::dr_heapstat_t(options_t *options_)
 dr_heapstat_t::~dr_heapstat_t(void) 
 {
     qDebug() << "INFO: Entering dr_heapstat_t::~dr_heapstat_t(void)";
-    snapshots.clear();
-    callstacks.clear();
+    for(int i = 0; i < snapshots.count();) {
+        snapshot_listing *tmp = snapshots.back();
+        snapshots.pop_back();
+        delete tmp;
+    }
+    for(int i = 0; i < callstacks.count();) {
+        callstack_listing *tmp = callstacks.back();
+        callstacks.pop_back();
+        delete tmp;
+    }
     delete snapshot_graph;
 }
 
@@ -75,9 +85,9 @@ void
 dr_heapstat_t::create_layout(void) 
 {
     qDebug() << "INFO: Entering dr_heapstat_t::create_layout(void)";
-    QGridLayout *main_layout = new QGridLayout;
+    main_layout = new QGridLayout;
     /* Controls (top) */
-    QHBoxLayout *controls_layout = new QHBoxLayout;
+    controls_layout = new QHBoxLayout;
     /* logdir textbox */
     log_dir_line_edit = new QLineEdit(this);
     connect(log_dir_line_edit, SIGNAL(textEdited(const QString &)), 
@@ -95,8 +105,9 @@ dr_heapstat_t::create_layout(void)
     /* Left side) */
     left_side = new QGridLayout;
     /* Graph */
-    QLabel *graph_title = new QLabel(QString(tr("Memory consumption over "
-                                "full process lifetime")), this);
+    graph_title = new QLabel(QString(tr("Memory consumption over "
+                                        "full process lifetime")), 
+                             this);
     left_side->addWidget(graph_title,0,0);
     snapshot_graph = new dr_heapstat_graph_t(NULL, NULL);
     left_side->addWidget(snapshot_graph,1,0);
@@ -104,17 +115,17 @@ dr_heapstat_t::create_layout(void)
     reset_graph_zoom_button = new QPushButton("Reset Graph Zoom");
     left_side->addWidget(reset_graph_zoom_button,2,0);
     /* line check boxes */
-    QVBoxLayout *check_box_layout = new QVBoxLayout;
-    QCheckBox *mem_alloc_check_box = new QCheckBox(tr("Memory allocated ("
-                                                      "requested) by process"),
-                                                   this);
-    QCheckBox *padding_check_box = new QCheckBox(tr("Memory allocated by "
-                                                    "process + Padding"),
-                                                 this);
-    QCheckBox *headers_check_box = new QCheckBox(tr("Memory allocated by "
-                                                    "process + Padding "
-                                                    "+ Heap headers"),
-                                                 this);
+    check_box_layout = new QVBoxLayout;
+    mem_alloc_check_box = new QCheckBox(tr("Memory allocated ("
+                                           "requested) by process"),
+                                        this);
+    padding_check_box = new QCheckBox(tr("Memory allocated by "
+                                         "process + Padding"),
+                                      this);
+    headers_check_box = new QCheckBox(tr("Memory allocated by "
+                                         "process + Padding "
+                                         "+ Heap headers"),
+                                      this);
     /* Start Checked */
     mem_alloc_check_box->setCheckState(Qt::Checked);
     padding_check_box->setCheckState(Qt::Checked);
@@ -125,14 +136,14 @@ dr_heapstat_t::create_layout(void)
             this, SLOT(change_lines()));
     connect(headers_check_box, SIGNAL(stateChanged(int)),
             this, SLOT(change_lines()));
-    check_box_layout->addWidget(mem_alloc_check_box);
-    check_box_layout->addWidget(padding_check_box);
     check_box_layout->addWidget(headers_check_box);
+    check_box_layout->addWidget(padding_check_box);
+    check_box_layout->addWidget(mem_alloc_check_box);
     left_side->addLayout(check_box_layout,3,0);
     /* messages box */
-    QTextEdit *messages = new QTextEdit(this);
-    QLabel *msg_title = new QLabel(QString(tr("Messages")), this);
-    QVBoxLayout *msg_layout = new QVBoxLayout;
+    messages = new QTextEdit(this);
+    msg_title = new QLabel(QString(tr("Messages")), this);
+    msg_layout = new QVBoxLayout;
     msg_layout->addWidget(msg_title,0);
     msg_layout->addWidget(messages,1);
     left_side->addLayout(msg_layout,4,0);
@@ -141,11 +152,11 @@ dr_heapstat_t::create_layout(void)
     left_side->setRowStretch(4,2);
 
     /* right side */
-    QGridLayout *right_side = new QGridLayout;
-    QLabel *right_title = new QLabel(QString(tr("Memory consumption at "
-                                                "a given point: Individual "
-                                                "callstacks")),
-                                    this);
+    right_side = new QGridLayout;
+    right_title = new QLabel(QString(tr("Memory consumption at "
+                                        "a given point: Individual "
+                                        "callstacks")),
+                             this);
     right_side->addWidget(right_title,0,0);
     /* Set up callstack table*/
     callstacks_table = new QTableWidget(this);
@@ -153,15 +164,25 @@ dr_heapstat_t::create_layout(void)
             this, SLOT(load_frames_text_edit(int,int,int,int)));
     right_side->addWidget(callstacks_table,1,0);
     /* Mid frame frameButtons */
-    QHBoxLayout *frame_buttons = new QHBoxLayout;
+    frame_buttons = new QHBoxLayout;
     prev_frame_button = new QPushButton("Prev Frames", this);
+    prev_frame_button->setEnabled(false);
+    connect(prev_frame_button, SIGNAL(clicked()),
+            this, SLOT(show_prev_frame()));
     next_frame_button = new QPushButton("Next Frames", this);
+    next_frame_button->setEnabled(false);
+    connect(next_frame_button, SIGNAL(clicked()),
+            this, SLOT(show_next_frame()));
+    display_label = new QLabel("", this);
     frame_buttons->addWidget(prev_frame_button);
+    frame_buttons->addWidget(display_label);
     frame_buttons->addStretch(1);
     frame_buttons->addWidget(next_frame_button);
     /* frame text box */
     right_side->addLayout(frame_buttons,2,0);
     frames_text_edit = new QTextEdit(this);
+    frames_text_edit->setReadOnly(true);
+    frames_text_edit->setLineWrapMode(QTextEdit::NoWrap);
     right_side->addWidget(frames_text_edit,3,0);
     right_side->setRowStretch(1,3);
     right_side->setRowStretch(3,5);
@@ -331,8 +352,8 @@ dr_heapstat_t::read_log_data(void)
                     i++;
                     instance_count--;
                 }
-                this_snapshot->assoc_callstacks.append(this_callstack
-                                                       ->callstack_num);
+                this_snapshot->assoc_callstacks.prepend(this_callstack->
+                                                            callstack_num);
             }
             snapshots.append(this_snapshot);
         } while(line.isNull() == false && 
@@ -341,10 +362,9 @@ dr_heapstat_t::read_log_data(void)
     }
     qDebug() << "INFO: snapshot.log read";
     /* Default to 0 */
-    int def = 0;
     if (options->hide_first_snapshot == true)
-        def++;
-    fill_callstacks_table(def);
+        current_snapshot_num++;
+    fill_callstacks_table(current_snapshot_num);
     draw_snapshot_graph();
 }
 
@@ -357,6 +377,11 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     qDebug() << "INFO: Entering dr_heapstat_t::fill_callstacks_table(int "
                 "snapshot)";
     /* refresh settings */
+    if(current_snapshot_num != snapshot) {
+        callstacks_display_page = 0;
+        current_snapshot_num = snapshot;
+    }
+
     callstacks_table->clear();
     callstacks_table->setRowCount(0);
     callstacks_table->setColumnCount(5);
@@ -374,31 +399,50 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
                                                         QHeaderView::Stretch);
 
     /* Put data into callstack_table */
-    int row_count = 0;
+    int row_count = -1;
+    int max_rows = options->num_callstacks_per_page;
     foreach(int callstack, snapshots.at(snapshot)->assoc_callstacks) {
-        callstacks_table->insertRow(row_count);
+        row_count++;
+        if (row_count < callstacks_display_page * max_rows)
+            continue;
+        else if (row_count >= (callstacks_display_page + 1) * max_rows)
+            break;
+
+        callstacks_table->insertRow(row_count % max_rows);
         /* Callstack number */
         QTableWidgetItem *num = new QTableWidgetItem;
         num->setData(Qt::DisplayRole, callstack);
-        callstacks_table->setItem(row_count,0,num);
+        callstacks_table->setItem(row_count % max_rows,0,num);
         /* Symbols */
         /* Memory data */
         QTableWidgetItem *asked = new QTableWidgetItem;
         asked->setData(Qt::DisplayRole, 
                       (double)(callstacks.at(callstack-1)->bytes_asked_for));
-        callstacks_table->setItem(row_count,2,asked);
+        callstacks_table->setItem(row_count % max_rows,2,asked);
 
         QTableWidgetItem *padding = new QTableWidgetItem;
         padding->setData(Qt::DisplayRole, 
                         (double)(callstacks.at(callstack-1)->extra_usable));
-        callstacks_table->setItem(row_count,3,padding);
+        callstacks_table->setItem(row_count % max_rows,3,padding);
 
         QTableWidgetItem *headers = new QTableWidgetItem;
         headers->setData(Qt::DisplayRole, 
                         (double)(callstacks.at(callstack-1)->extra_occupied));
-        callstacks_table->setItem(row_count,4,headers);
-
+        callstacks_table->setItem(row_count % max_rows,4,headers);
     }
+    /* Current page info */
+    qreal display_num = callstacks_display_page 
+                        * options->num_callstacks_per_page;
+    qreal total = snapshots.at(current_snapshot_num)->assoc_callstacks.count();
+    display_label->setText(tr("Displaying callstacks %1 to %2 of %3")
+                       .arg(display_num + 1)
+                       .arg(display_num + callstacks_table->rowCount())
+                       .arg(total));
+    /* Enable next button? */
+    if (display_num + callstacks_table->rowCount() <  total)
+        next_frame_button->setEnabled(true);
+    else
+        next_frame_button->setEnabled(false);
     /* Select first row */
     callstacks_table->setCurrentCell(0,0);
 }
@@ -435,15 +479,15 @@ dr_heapstat_t::dr_check_dir(QDir dir)
     }
     if (retVal == false) {
         QMessageBox msg_box(QMessageBox::Warning, 
-                           tr("Invalid Directory"),
-                           error_msg, 0, this);
+                            tr("Invalid Directory"),
+                            error_msg, 0, this);
         msg_box.exec();
     }
     return retVal;
 }
 
 /* Private
- * Checks validity of directories
+ * Checks validity of files
  */
 bool 
 dr_heapstat_t::dr_check_file(QFile& file) 
@@ -462,8 +506,8 @@ dr_heapstat_t::dr_check_file(QFile& file)
     } 
     if (retVal == false) {
         QMessageBox msg_box(QMessageBox::Warning, 
-                           tr("Invalid File"),
-                           error_msg, 0, this);
+                            tr("Invalid File"),
+                            error_msg, 0, this);
         msg_box.exec();
     }
     
@@ -507,18 +551,20 @@ dr_heapstat_t::draw_snapshot_graph(void)
 {
     qDebug() << "INFO: Entering dr_heapstat_t::draw_snapshot_graph(void)";
     /* remove */
-    if (snapshot_graph != NULL && 
-        snapshot_graph->is_null() == true) {
-        left_side->removeWidget(snapshot_graph);
-        delete snapshot_graph;
-        /* create */
-        snapshot_graph = new dr_heapstat_graph_t(&snapshots, options);    
-        left_side->addWidget(snapshot_graph,1,0);
-        connect(snapshot_graph, SIGNAL(highlight_changed(int)),
-                this, SLOT(fill_callstacks_table(int)));
-        connect(reset_graph_zoom_button, SIGNAL(clicked()),
-                snapshot_graph, SLOT(reset_graph_zoom()));
-    }
+    left_side->removeWidget(snapshot_graph);
+    delete snapshot_graph;
+    /* create */
+    snapshot_graph = new dr_heapstat_graph_t(&snapshots, options);  
+    /* update lines */
+    snapshot_graph->refresh_lines(0, mem_alloc_check_box->isChecked() == true);
+    snapshot_graph->refresh_lines(1, padding_check_box->isChecked() == true);
+    snapshot_graph->refresh_lines(2, headers_check_box->isChecked() == true);  
+
+    left_side->addWidget(snapshot_graph,1,0);
+    connect(snapshot_graph, SIGNAL(highlight_changed(int)),
+            this, SLOT(fill_callstacks_table(int)));
+    connect(reset_graph_zoom_button, SIGNAL(clicked()),
+            snapshot_graph, SLOT(reset_graph_zoom()));
 }
 
 /* Private Slot
@@ -530,23 +576,50 @@ dr_heapstat_t::change_lines(void)
     qDebug() << "INFO: Entering dr_heapstat_t::change_lines(void)";
     QCheckBox *emitter = (QCheckBox *)sender();
     int id = -1;
+    bool state = false;
     if (emitter->text().contains(QString("Heap headers")) == true) {
         id = 2;
+        state = headers_check_box->isChecked() == true;
     } else if (emitter->text().contains(QString("Padding")) == true) {
         id = 1;
+        state = padding_check_box->isChecked() == true;
     } else if (emitter->text().contains(QString("requested")) == true) {
         id = 0;
+        state = mem_alloc_check_box->isChecked() == true;
     }
     if (id != -1) {
-        snapshot_graph->refresh_lines(id);
+        snapshot_graph->refresh_lines(id, state);
     }
 }
 
 /* Public
- * Tells the snapshot graph to update after a settings change
+ * Updates widgets after a settings change
  */
 void
 dr_heapstat_t::update_settings(void)
 {
     snapshot_graph->update_settings();
+    callstacks_display_page = 0;
+    fill_callstacks_table(current_snapshot_num);
+}
+
+/* Private Slot
+ * Decrements page for callstacks_table
+ */
+void dr_heapstat_t::show_prev_frame(void) 
+{
+    callstacks_display_page--;
+    if (callstacks_display_page == 0)
+        prev_frame_button->setEnabled(false);
+    fill_callstacks_table(current_snapshot_num);
+}
+
+/* Private Slot
+ * Increments page for callstacks_table
+ */
+void dr_heapstat_t::show_next_frame(void) 
+{
+    callstacks_display_page++;
+    prev_frame_button->setEnabled(true);
+    fill_callstacks_table(current_snapshot_num);
 }

@@ -33,7 +33,7 @@ public:
 
 public slots:
     void 
-    refresh_lines(int line);
+    refresh_lines(int line, bool state);
     
     void 
     reset_graph_zoom(void);
@@ -79,7 +79,8 @@ private:
     
     void 
     draw_helper(QPainter *painter, qreal total_percent, 
-               QPoint *prev_point, unsigned long *data);
+                QPoint *prev_point, qreal *data,
+                bool first_point);
     
     void 
     draw_heap_data(QPainter *painter);
@@ -100,7 +101,7 @@ private:
     x_axis_height(void);
     
     qreal 
-    data_point_y(unsigned long y);
+    data_point_y(qreal y);
     
     qreal 
     data_point_x(qreal x);
@@ -114,8 +115,8 @@ private:
     /* Graph Boundaries */
     qreal graph_outer_margin;
     QString maximum_value;
-    unsigned long width_max;
-    unsigned long height_max;
+    qreal width_max;
+    qreal height_max;
     qreal text_width;
     qreal text_height;
     qreal left_bound;

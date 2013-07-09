@@ -18,20 +18,20 @@
 struct snapshot_listing {
     QVector<int> assoc_callstacks;
     int snapshot_num;
-    unsigned long tot_mallocs,
-                  tot_bytes_asked_for,
-                  tot_bytes_usable,
-                  tot_bytes_occupied,
-                  num_ticks;
+    qreal tot_mallocs,
+          tot_bytes_asked_for,
+          tot_bytes_usable,
+          tot_bytes_occupied,
+          num_ticks;
 };
 
 struct callstack_listing {
     QStringList frame_data;
-    unsigned long  callstack_num,
-                   instances, 
-                   bytes_asked_for,
-                   extra_usable,
-                   extra_occupied;
+    qreal callstack_num,
+          instances, 
+          bytes_asked_for,
+          extra_usable,
+          extra_occupied;
 };
 
 struct options_t {
@@ -39,6 +39,8 @@ struct options_t {
     bool hide_first_snapshot;
     int num_vertical_ticks;
     bool square_graph;
+    int num_callstacks_per_page;
+    bool antialiasing_enabled;
 };
 
 #endif

@@ -47,6 +47,20 @@ main_window_t::main_window_t(void)
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
+/* Public
+ * Destructor
+ */
+main_window_t::~main_window_t(void) 
+{
+    qDebug() << "INFO: Entering main_window_t::~main_window_t(void)";
+    for (int i = 0; i < plugins.count();) {
+        tool_interface_t *plugin = plugins.back();
+        plugins.pop_back();
+        delete plugin;
+    }
+    delete opt_win;
+}
+
 /* Protected
  * Handles closing of all tabs
  */
@@ -79,7 +93,7 @@ main_window_t::about(void)
 void 
 main_window_t::update_menus(void) 
 {
-    bool has_tool_base = (active_tool_base() != 0);
+    bool has_tool_base = (active_tool() != 0);
     close_act->setEnabled(has_tool_base);
     close_all_act->setEnabled(has_tool_base);
     next_act->setEnabled(has_tool_base);
@@ -101,24 +115,22 @@ main_window_t::update_window_menu(void)
     window_menu->addAction(previous_act);
     window_menu->addAction(separator_act);
 
-    separator_act->setVisible(tab_area->currentWidget());
+    separator_act->setVisible(tab_area->currentWidget() != NULL);
 
     for (int i = 0; i < tab_area->count(); ++i) {
-        tool_base_t *tool = qobject_cast<tool_base_t *>(tab_area->widget(i));
+        QWidget *tool = qobject_cast<QWidget *>(tab_area->widget(i));
 
         QString text;
         if (i < 9) {
             text = tr("&%1 %2").arg(i + 1)
-                               .arg(tab_area->tabText(i) + ": " +
-                                    tool->user_friendly_current_file());
+                               .arg(tab_area->tabText(i));
         } else {
             text = tr("%1 %2").arg(i + 1)
-                              .arg(tab_area->tabText(i) + ": " +
-                                   tool->user_friendly_current_file());
+                              .arg(tab_area->tabText(i));
         }
         QAction *action  = window_menu->addAction(text);
         action->setCheckable(true);
-        action ->setChecked(tool == active_tool_base());
+        action ->setChecked(tool == active_tool());
         connect(action, SIGNAL(triggered()), 
                 window_mapper, SLOT(map()));
         window_mapper->setMapping(action, i);
@@ -268,12 +280,12 @@ main_window_t::switch_layout_direction(void)
 /* Private
  * finds and returns active ToolBase tab, if there is one
  */
-tool_base_t *
-main_window_t::active_tool_base(void) 
+QWidget *
+main_window_t::active_tool(void) 
 {
     int active_tab = tab_area->currentIndex();
     if (active_tab != -1)
-        return qobject_cast<tool_base_t *>(tab_area->currentWidget());
+        return qobject_cast<QWidget *>(tab_area->currentWidget());
     return 0;
 }
 
@@ -374,14 +386,16 @@ main_window_t::load_tools(void)
     plugins_dir.cd("tools");
 
     foreach (QString file_name, plugins_dir.entryList(QDir::Files)) {
-        QPluginLoader loader(plugins_dir.absoluteFilePath(file_name));
+        QPluginLoader loader(plugins_dir.absoluteFilePath(file_name), this);
         QObject *plugin = loader.instance();
         if (plugin != NULL) {
             tool_interface_t *i_tool;
             i_tool = qobject_cast<tool_interface_t *>(plugin);
-            if (i_tool)
+            if (i_tool) {
                 add_to_menu(plugin, i_tool->tool_names(), 
                             tool_menu, SLOT(add_tab()), tool_action_group);
+                plugins.append(i_tool);
+            }
             plugin_file_names += file_name;
         } else {
                QMessageBox::about(this, tr("About DR-GUI"),

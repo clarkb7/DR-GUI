@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <QLabel>
 #include <QDebug>
+#include <QFileDialog>
 
 #include "dr_heap_options.h"
 
@@ -52,11 +53,15 @@ dr_heapstat_options_t::write_settings(void)
     settings.beginGroup("Dr. Heapstat");
     settings.setValue("Default load directory", 
                       def_load_dir_line_edit->text());
-    settings.setValue("Hide first snapshot", ignore_first_snapshot_check_box->
-                                                 isChecked() == true);
+    settings.setValue("Hide first snapshot", 
+                      ignore_first_snapshot_check_box->isChecked() == true);
+    settings.setValue("Square graph", 
+                       square_graph_check_box->isChecked() == true);
+    settings.setValue("Antialiasing", 
+                       antialiasing_check_box->isChecked() == true);
     settings.setValue("Number of vertical ticks", num_tabs_spin_box->value());
-    settings.setValue("Square graph", square_graph_check_box->
-                                          isChecked() == true);
+    settings.setValue("Number of callstacks per page",  
+                      num_callstacks_per_page_spin_box->value());
     settings.endGroup();
 
     /* adjust info */
@@ -78,9 +83,14 @@ dr_heapstat_options_t::read_settings(void)
                                            QString("/home")).toString();
     options->hide_first_snapshot = settings.value("Hide first snapshot", 
                                                   true).toBool();
+    options->square_graph = settings.value("Square graph", false).toBool();
+    options->antialiasing_enabled = settings.value("Antialiasing", 
+                                                   true).toBool();
     options->num_vertical_ticks = settings.value("Number of vertical ticks", 
                                                  10).toInt();
-    options->square_graph = settings.value("Square graph", false).toBool();
+    options->num_callstacks_per_page = settings.value(
+                                               "Number of callstacks per page",
+                                               50).toInt();
     settings.endGroup();
 
     /* adjust GUI to reflect new settings */
@@ -88,7 +98,10 @@ dr_heapstat_options_t::read_settings(void)
     ignore_first_snapshot_check_box->setChecked(options->hide_first_snapshot
                                                 == true);
     square_graph_check_box->setChecked(options->square_graph == true);
+    antialiasing_check_box->setChecked(options->antialiasing_enabled == true);
     num_tabs_spin_box->setValue(options->num_vertical_ticks);
+    num_callstacks_per_page_spin_box->setValue(options->
+                                                   num_callstacks_per_page);
 }
 
 /* Private
@@ -109,18 +122,26 @@ dr_heapstat_options_t::set_options(options_t *options_)
 void
 dr_heapstat_options_t::create_layout(void) 
 {
-    QGroupBox *general_group = new QGroupBox(tr("General"));
+    QGroupBox *general_group = new QGroupBox(tr("General"), this);
     QLabel *load_dir_label = new QLabel(tr("Default loading directory:"));
-    def_load_dir_line_edit = new QLineEdit;
+    def_load_dir_line_edit = new QLineEdit(this);
     QPushButton *find_def_load_dir_button = new QPushButton(tr("Select"));
-
-    QGroupBox *graph_group = new QGroupBox(tr("Graph"));
+    connect(find_def_load_dir_button, SIGNAL(clicked()),
+            this, SLOT(choose_def_load_dir()));
+    QGroupBox *graph_group = new QGroupBox(tr("Graph"), this);
     ignore_first_snapshot_check_box = new QCheckBox(tr("Ignore first "
                                                        "snapshot"));
     square_graph_check_box = new QCheckBox(tr("Square graph"));
-    num_tabs_spin_box = new QSpinBox;
-    QLabel *spin_box_label = new QLabel(tr(" vertical scale ticks"));
-    num_tabs_spin_box->setMinimum(2);
+    antialiasing_check_box = new QCheckBox(tr("Antialiasing"));
+
+    num_tabs_spin_box = new QSpinBox(this);
+    QLabel *tabs_spin_box_label = new QLabel(tr(" vertical scale ticks"));
+    num_tabs_spin_box->setMinimum(1);
+    
+    num_callstacks_per_page_spin_box = new QSpinBox(this);
+    QLabel *callstack_spin_box_label = new QLabel(tr(" callstacks per page"));
+    num_callstacks_per_page_spin_box->setMinimum(1);
+    num_callstacks_per_page_spin_box->setMaximum(500);
 
     QVBoxLayout *main_layout = new QVBoxLayout;
 
@@ -133,8 +154,11 @@ dr_heapstat_options_t::create_layout(void)
     QGridLayout *graph_layout = new QGridLayout;
     graph_layout->addWidget(ignore_first_snapshot_check_box, 0, 0);
     graph_layout->addWidget(square_graph_check_box, 1, 0);
-    graph_layout->addWidget(num_tabs_spin_box, 2, 0);
-    graph_layout->addWidget(spin_box_label, 2, 1);
+    graph_layout->addWidget(antialiasing_check_box, 2, 0);
+    graph_layout->addWidget(num_tabs_spin_box, 3, 0);
+    graph_layout->addWidget(tabs_spin_box_label, 3, 1);
+    graph_layout->addWidget(num_callstacks_per_page_spin_box, 4, 0);    
+    graph_layout->addWidget(callstack_spin_box_label, 4, 1);
     graph_group->setLayout(graph_layout);
 
     main_layout->addWidget(general_group);
@@ -142,4 +166,22 @@ dr_heapstat_options_t::create_layout(void)
     main_layout->addStretch(1);
 
     setLayout(main_layout);
+}
+
+/* Private Slot
+ * User chooses def_load_dir
+ */
+void
+dr_heapstat_options_t::choose_def_load_dir(void)
+{
+   QString test_dir;
+   test_dir = QFileDialog::getExistingDirectory(this, 
+                                                tr("Open Directory"),
+                                                options->def_load_dir, 
+                                                QFileDialog::ShowDirsOnly);
+   if (test_dir.isEmpty() == true) {
+       return;
+   }
+   /* set text box text */
+   def_load_dir_line_edit->setText(test_dir);
 }

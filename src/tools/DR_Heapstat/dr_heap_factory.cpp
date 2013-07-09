@@ -43,7 +43,15 @@ dr_heapstat_factory_t::dr_heapstat_factory_t(void)
  */
 dr_heapstat_factory_t::~dr_heapstat_factory_t(void) 
 {
-    
+    qDebug() << "INFO: Entering dr_heapstat_factory_t::~dr_heapstat_factory_t"
+                "(void)";
+    delete options_page;
+    delete options;
+    for(int i = 0; i < tool_instances.count();) {
+        dr_heapstat_t *tmp = tool_instances.back();
+        tool_instances.pop_back();
+        delete tmp;
+    }
 }
 
 /* Public
