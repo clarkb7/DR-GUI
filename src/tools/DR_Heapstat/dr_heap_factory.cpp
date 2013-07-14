@@ -93,6 +93,7 @@ dr_heapstat_factory_t::create_options_page(void)
 void
 dr_heapstat_factory_t::update_settings(void)
 {
+    qDebug() << "INFO: Entering dr_heapstat_factory_t::update_settings(void)";
     foreach (dr_heapstat_t *tool, tool_instances) {
         tool->update_settings();
     }

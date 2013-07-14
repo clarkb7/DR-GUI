@@ -65,7 +65,7 @@ main_window_t::~main_window_t(void)
  * Handles closing of all tabs
  */
 void 
-main_window_t::close_event(QCloseEvent *event) 
+main_window_t::closeEvent(QCloseEvent *event) 
 {
     close_all_tabs();
     if (tab_area->currentWidget() != NULL) {
@@ -260,6 +260,7 @@ main_window_t::read_settings(void)
 void 
 main_window_t::write_settings(void) 
 {
+    qDebug() << "INFO: Entering main_window_t::write_settings(void)";
     QSettings settings("Dynamorio", "DR-GUI");
     settings.setValue("pos", pos());
     settings.setValue("size", size());

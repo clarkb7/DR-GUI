@@ -30,6 +30,9 @@ class QHBoxLayout;
 class QLabel;
 class QVBoxLayout;
 class QCheckBox;
+class QTabWidget;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 class dr_heapstat_graph_t;
 struct options_t;
@@ -59,20 +62,22 @@ private slots:
     log_dir_text_changed_slot(void);
 
     void 
-    load_frames_text_edit(int current_row, int current_column, 
-                          int previous_row, int previous_column);
-
-    void 
     draw_snapshot_graph(void);
 
     void 
     change_lines(void);
 
     void
-    show_prev_frame(void);
+    show_prev_page(void);
 
     void
-    show_next_frame(void);
+    show_next_page(void);
+
+    void
+    refresh_frame_views(int current_row, int current_column, 
+                        int previous_row, int previous_column);
+    void
+    frames_tree_widget_double_clicked(QTreeWidgetItem *item, int column);
 
 private:
     void 
@@ -89,6 +94,12 @@ private:
 
     void 
     read_log_data(void);
+
+    void 
+    load_frames_text_edit(int current_row);
+
+    void 
+    load_frames_tree_widget(int current_row);
 
     /* GUI */
     QGridLayout *main_layout;
@@ -116,12 +127,21 @@ private:
     QLabel *right_title;
     QTableWidget *callstacks_table;
 
-    QHBoxLayout *frame_buttons;
-    QPushButton *prev_frame_button;
-    QLabel *display_label;
-    QPushButton *next_frame_button;
+    QHBoxLayout *callstacks_page_buttons;
+    QPushButton *prev_page_button;
+    QLabel *page_display_label;
+    QPushButton *next_page_button;
     
+    QTabWidget *frames_tab_area;
     QTextEdit *frames_text_edit;
+
+    QWidget *frames_tree_tab_widget;
+    QVBoxLayout *frames_tree_layout;
+    QTreeWidget *frames_tree_widget;
+
+    QHBoxLayout *frames_tree_controls_layout;
+    QPushButton *expand_all_button;
+    QPushButton *collapse_all_button;
 
     QString log_dir_loc;
     

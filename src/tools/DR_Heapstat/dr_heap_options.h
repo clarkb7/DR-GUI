@@ -53,8 +53,6 @@ private:
 
     void
     read_settings(void);
-    
-
 
     options_t *options;
 

@@ -27,6 +27,9 @@
 #include <QHeaderView>
 #include <QDebug>
 #include <QCheckBox>
+#include <QTabWidget>
+#include <QTreeWidget>
+#include <QMap>
 
 #include <cmath>
 #include <cassert>
@@ -161,29 +164,56 @@ dr_heapstat_t::create_layout(void)
     /* Set up callstack table*/
     callstacks_table = new QTableWidget(this);
     connect(callstacks_table, SIGNAL(currentCellChanged(int,int,int,int)),
-            this, SLOT(load_frames_text_edit(int,int,int,int)));
+            this, SLOT(refresh_frame_views(int,int,int,int)));
     right_side->addWidget(callstacks_table,1,0);
     /* Mid frame frameButtons */
-    frame_buttons = new QHBoxLayout;
-    prev_frame_button = new QPushButton("Prev Frames", this);
-    prev_frame_button->setEnabled(false);
-    connect(prev_frame_button, SIGNAL(clicked()),
-            this, SLOT(show_prev_frame()));
-    next_frame_button = new QPushButton("Next Frames", this);
-    next_frame_button->setEnabled(false);
-    connect(next_frame_button, SIGNAL(clicked()),
-            this, SLOT(show_next_frame()));
-    display_label = new QLabel("", this);
-    frame_buttons->addWidget(prev_frame_button);
-    frame_buttons->addWidget(display_label);
-    frame_buttons->addStretch(1);
-    frame_buttons->addWidget(next_frame_button);
+    callstacks_page_buttons = new QHBoxLayout;
+    prev_page_button = new QPushButton("Prev Frames", this);
+    prev_page_button->setEnabled(false);
+    connect(prev_page_button, SIGNAL(clicked()),
+            this, SLOT(show_prev_page()));
+    next_page_button = new QPushButton("Next Frames", this);
+    next_page_button->setEnabled(false);
+    connect(next_page_button, SIGNAL(clicked()),
+            this, SLOT(show_next_page()));
+    page_display_label = new QLabel("", this);
+    callstacks_page_buttons->addWidget(prev_page_button);
+    callstacks_page_buttons->addWidget(page_display_label);
+    callstacks_page_buttons->addStretch(1);
+    callstacks_page_buttons->addWidget(next_page_button);
+    /* frame tab area */
+    frames_tab_area = new QTabWidget(this);
     /* frame text box */
-    right_side->addLayout(frame_buttons,2,0);
+    right_side->addLayout(callstacks_page_buttons,2,0);
     frames_text_edit = new QTextEdit(this);
     frames_text_edit->setReadOnly(true);
     frames_text_edit->setLineWrapMode(QTextEdit::NoWrap);
-    right_side->addWidget(frames_text_edit,3,0);
+    /* frame tree widget */
+    frames_tree_tab_widget = new QWidget;
+    frames_tree_layout = new QVBoxLayout(frames_tree_tab_widget);
+    frames_tree_widget = new QTreeWidget(this);
+    connect(frames_tree_widget, SIGNAL(itemDoubleClicked(QTreeWidgetItem *, 
+                                                         int)),
+            this, SLOT(frames_tree_widget_double_clicked(QTreeWidgetItem *, 
+                                                         int)));
+    frames_tree_widget->setHeaderHidden(true);
+    /* tree control buttons */
+    frames_tree_controls_layout = new QHBoxLayout;
+    expand_all_button = new QPushButton(tr("Expand all"), this);
+    connect(expand_all_button, SIGNAL(clicked()),
+            frames_tree_widget, SLOT(expandAll()));
+    collapse_all_button = new QPushButton(tr("Collapse all"), this);
+    connect(collapse_all_button, SIGNAL(clicked()),
+            frames_tree_widget, SLOT(collapseAll()));
+    frames_tree_controls_layout->addStretch(1);
+    frames_tree_controls_layout->addWidget(expand_all_button);
+    frames_tree_controls_layout->addWidget(collapse_all_button);
+    frames_tree_layout->addWidget(frames_tree_widget);
+    frames_tree_layout->addLayout(frames_tree_controls_layout);
+
+    frames_tab_area->addTab(frames_text_edit, "List View");
+    frames_tab_area->addTab(frames_tree_tab_widget, "Tree View");
+    right_side->addWidget(frames_tab_area,3,0);
     right_side->setRowStretch(1,3);
     right_side->setRowStretch(3,5);
 
@@ -386,7 +416,8 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
     callstacks_table->setRowCount(0);
     callstacks_table->setColumnCount(5);
     QStringList table_headers;
-    table_headers << tr("Call Stack") << tr("Symbol") << tr("Memory Allocated")          << tr("+Padding") << tr("+Headers");
+    table_headers << tr("Call Stack") << tr("Symbol") << tr("Alloc")
+                  << tr("+Pad") << tr("+Head");
     callstacks_table->setHorizontalHeaderLabels(table_headers);
     callstacks_table->setSortingEnabled(true);
     callstacks_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -408,41 +439,66 @@ dr_heapstat_t::fill_callstacks_table(int snapshot)
         else if (row_count >= (callstacks_display_page + 1) * max_rows)
             break;
 
+        const callstack_listing *this_callstack = callstacks.at(callstack - 1);
         callstacks_table->insertRow(row_count % max_rows);
         /* Callstack number */
         QTableWidgetItem *num = new QTableWidgetItem;
         num->setData(Qt::DisplayRole, callstack);
-        callstacks_table->setItem(row_count % max_rows,0,num);
+        callstacks_table->setItem(row_count % max_rows, 0, num);
         /* Symbols */
+        QTableWidgetItem *symbols = new QTableWidgetItem;
+        QString symbol_display;
+        const QStringList *frames = &(this_callstack->frame_data);
+        for (int i = 0; i < 3; i++) {
+            QString frame = frames->at(i);
+            QString func_name = "?";
+            if (frame.contains("[") && frame.contains("]"))
+                func_name = frame.split("!").at(1).split(" [").at(0);
+            else 
+                func_name = frame.split("!").at(1).split(" (0x").at(0);
+            /* strip trailing spaces */
+            while (func_name.at(func_name.count() - 1) == ' ')
+                func_name.chop(1);
+            symbol_display.append(func_name);
+            if ( i != 2)
+                symbol_display.append(" <-- ");
+        }
+        symbols->setData(Qt::DisplayRole, symbol_display);
+        callstacks_table->setItem(row_count % max_rows, 1, symbols);
         /* Memory data */
         QTableWidgetItem *asked = new QTableWidgetItem;
         asked->setData(Qt::DisplayRole, 
-                      (double)(callstacks.at(callstack-1)->bytes_asked_for));
-        callstacks_table->setItem(row_count % max_rows,2,asked);
+                      (double)(this_callstack->bytes_asked_for));
+        callstacks_table->setItem(row_count % max_rows, 2, asked);
 
         QTableWidgetItem *padding = new QTableWidgetItem;
         padding->setData(Qt::DisplayRole, 
-                        (double)(callstacks.at(callstack-1)->extra_usable));
-        callstacks_table->setItem(row_count % max_rows,3,padding);
+                        (double)(this_callstack->extra_usable));
+        callstacks_table->setItem(row_count % max_rows, 3, padding);
 
         QTableWidgetItem *headers = new QTableWidgetItem;
         headers->setData(Qt::DisplayRole, 
-                        (double)(callstacks.at(callstack-1)->extra_occupied));
-        callstacks_table->setItem(row_count % max_rows,4,headers);
+                        (double)(this_callstack->extra_occupied));
+        callstacks_table->setItem(row_count % max_rows, 4, headers);
     }
     /* Current page info */
     qreal display_num = callstacks_display_page 
                         * options->num_callstacks_per_page;
     qreal total = snapshots.at(current_snapshot_num)->assoc_callstacks.count();
-    display_label->setText(tr("Displaying callstacks %1 to %2 of %3")
-                       .arg(display_num + 1)
-                       .arg(display_num + callstacks_table->rowCount())
-                       .arg(total));
-    /* Enable next button? */
+    page_display_label->setText(tr("Displaying callstacks %1 to %2 of %3")
+                                .arg(display_num + 1)
+                                .arg(display_num + callstacks_table->
+                                                       rowCount())
+                                .arg(total));
+    /* Enable navigation buttons? */
     if (display_num + callstacks_table->rowCount() <  total)
-        next_frame_button->setEnabled(true);
+        next_page_button->setEnabled(true);
     else
-        next_frame_button->setEnabled(false);
+        next_page_button->setEnabled(false);
+    if (callstacks_display_page == 0)
+        prev_page_button->setEnabled(false);
+    else
+        prev_page_button->setEnabled(true);
     /* Select first row */
     callstacks_table->setCurrentCell(0,0);
 }
@@ -514,32 +570,28 @@ dr_heapstat_t::dr_check_file(QFile& file)
     return retVal;
 }
 
-/* Private Slot
+/* Private
  * Loads frame data into frames_text_edit for requested callstack
  */
 void 
-dr_heapstat_t::load_frames_text_edit(int current_row, int current_column,
-                                     int previous_row, int previous_column) 
+dr_heapstat_t::load_frames_text_edit(int current_row) 
 {
     qDebug() << "INFO: Entering DR_Heapstat::load_frames_text_edit("
                 "int current_row, int current_column, int previous_row, "
                 "int previous_column)";
-    if ( ((current_row != previous_row) ||
-          (current_column != previous_column)) && 
-        callstacks_table->selectedItems().size() != 0) {
-        frames_text_edit->clear();
-        int callstack_index = callstacks_table->item(current_row,0)
-                                              ->data(Qt::DisplayRole)
-                                              .toInt()-1;
-        QStringList frames = callstacks.at(callstack_index)->frame_data;
-        frames_text_edit->insertPlainText(QString(tr("Callstack #")));
-        frames_text_edit->insertPlainText(QString::number(callstack_index+1));
+
+    frames_text_edit->clear();
+    int callstack_index = callstacks_table->item(current_row,0)
+                                          ->data(Qt::DisplayRole)
+                                          .toInt()-1;
+    QStringList frames = callstacks.at(callstack_index)->frame_data;
+    frames_text_edit->insertPlainText(QString(tr("Callstack #")));
+    frames_text_edit->insertPlainText(QString::number(callstack_index+1));
+    frames_text_edit->insertHtml(QString("<br>"));
+    /* Add frame data */
+    foreach (const QString frame, frames) {
         frames_text_edit->insertHtml(QString("<br>"));
-        /* Add frame data */
-        foreach (const QString frame, frames) {
-            frames_text_edit->insertHtml(QString("<br>"));
-            frames_text_edit->insertPlainText(frame);            
-        }
+        frames_text_edit->insertPlainText(frame);            
     }
 }
 
@@ -598,28 +650,184 @@ dr_heapstat_t::change_lines(void)
 void
 dr_heapstat_t::update_settings(void)
 {
+    qDebug() << "INFO: Entering dr_heapstat_t::change_lines(void)";
     snapshot_graph->update_settings();
     callstacks_display_page = 0;
-    fill_callstacks_table(current_snapshot_num);
+    if (snapshot_graph->is_null() == false)
+        fill_callstacks_table(current_snapshot_num);
 }
 
 /* Private Slot
  * Decrements page for callstacks_table
  */
-void dr_heapstat_t::show_prev_frame(void) 
+void 
+dr_heapstat_t::show_prev_page(void) 
 {
     callstacks_display_page--;
-    if (callstacks_display_page == 0)
-        prev_frame_button->setEnabled(false);
     fill_callstacks_table(current_snapshot_num);
 }
 
 /* Private Slot
  * Increments page for callstacks_table
  */
-void dr_heapstat_t::show_next_frame(void) 
+void 
+dr_heapstat_t::show_next_page(void) 
 {
     callstacks_display_page++;
-    prev_frame_button->setEnabled(true);
     fill_callstacks_table(current_snapshot_num);
+}
+
+/* Private Slot
+ * Refreshes the frame views with data from the new callstack 
+ */
+void
+dr_heapstat_t::refresh_frame_views(int current_row, int current_column, 
+                                   int previous_row, int previous_column)
+{
+    Q_UNUSED(current_column);
+    Q_UNUSED(previous_column);
+    if (current_row != previous_row && 
+        callstacks_table->selectedItems().size() != 0) {
+        load_frames_text_edit(current_row);
+        load_frames_tree_widget(current_row);
+    }
+}
+
+typedef QPair<QString, QString> frame_pair_t;
+typedef QMap<frame_pair_t, QVector<QStringList> > frame_inner_map_t;
+typedef QMap<QString, frame_inner_map_t > frame_map_t;
+
+/* Private
+ * Loads frame data into frames_tree_widget for requested callstack
+ */
+void
+dr_heapstat_t::load_frames_tree_widget(int current_row)
+{
+    /* Settings */
+    const int num_columns = 4;
+    const QBrush exec_brush(QColor(0,0,0,70));
+    const QBrush file_brush(QColor(0,0,155,25));
+    frames_tree_widget->clear();
+    frames_tree_widget->setColumnCount(num_columns);
+    frames_tree_widget->setAnimated(true);
+    frames_tree_widget->setHeaderHidden(false);
+    /* Set header labels */
+    QStringList header_labels;
+    header_labels << QString(50, ' ') << tr("Line #") 
+                  << tr("Address%1").arg(QString(6, ' ')) << tr("Path");
+    frames_tree_widget->setHeaderLabels(header_labels);
+    frames_tree_widget->header()->resizeSections(
+                                      QHeaderView::ResizeToContents);
+    int callstack_index = callstacks_table->item(current_row,0)
+                                          ->data(Qt::DisplayRole)
+                                          .toInt() - 1;
+    QStringList *frames = &(callstacks.at(callstack_index)->frame_data);
+    /* Gather Data */
+    frame_map_t frame_data_map;
+    foreach (const QString frame, *frames) {
+        /* exec name */
+        QString exec_name = frame.split("!").at(0).split(" ").back();
+        frame_map_t::iterator exec_itr;
+        exec_itr = frame_data_map.find(exec_name);
+        /* QMap differs from stl map, found insert is replaced */
+        if (exec_itr == frame_data_map.end())
+            exec_itr = frame_data_map.insert(exec_name, 
+                                             frame_inner_map_t());
+        /* file and func info */
+        /* read */
+        QString file_name = "?";
+        QString func_name = "?";
+        QString line_num = "?";
+        QString file_path = "?";
+        QString address = "?";
+        if (frame.contains("[") && frame.contains("]")) {
+            file_name = frame.split("]").at(0).split("/").back();
+            line_num = file_name.split(":").back();
+            file_name = file_name.split(":").at(0);
+            func_name = frame.split("!").at(1).split(" [").at(0);
+            file_path = frame.split("[").at(1).split(file_name).at(0);
+        } else {
+            func_name = frame.split("!").at(1).split(" (0x").at(0);
+        }
+        address = frame.split("(0x").at(1).split(">) ").at(0);
+        address.prepend("0x");
+        address.append(">");
+        /* store */
+        frame_pair_t tmp_pair(file_path, file_name);
+        QStringList tmp_list;
+        tmp_list << func_name << line_num << address;
+        if (exec_itr->find(tmp_pair) == exec_itr->end()) {
+            QVector<QStringList> tmp_vec;
+            tmp_vec.append(tmp_list);
+            exec_itr->insert(tmp_pair, tmp_vec);
+        } else {
+            exec_itr->find(tmp_pair)->append(tmp_list);
+        }
+    }
+
+    /* put into tree */
+    frame_map_t::const_iterator exec_itr;
+    exec_itr = frame_data_map.constBegin();
+    int counter = -1;
+    while (exec_itr != frame_data_map.constEnd()) {
+        QTreeWidgetItem *exec_name;
+        exec_name = new QTreeWidgetItem((QTreeWidget *)0, 
+                                        QStringList(exec_itr.key()));
+        counter++;
+        /* color */
+        if (counter % 2 == 0)
+            for (int i = 0; i < num_columns; i++)
+                exec_name->setBackground(i, file_brush);
+        frame_inner_map_t::const_iterator file_itr;
+        file_itr = exec_itr.value().constBegin();
+        /* file names */
+        while (file_itr != exec_itr.value().constEnd()) {
+            QStringList tmp_list;
+            tmp_list << file_itr.key().second << QString() << QString()
+                     << file_itr.key().first;
+            QTreeWidgetItem *file_name;
+            file_name = new QTreeWidgetItem((QTreeWidget *)0, 
+                                            tmp_list); 
+            counter++;
+            /* color */
+            if (counter % 2 == 0)
+                for (int i = 0; i < num_columns; i++)
+                    file_name->setBackground(i, file_brush);
+            /* function names */
+            foreach (QStringList info, file_itr.value()) {
+                QTreeWidgetItem *func_name;
+                func_name = new QTreeWidgetItem((QTreeWidget *)0, 
+                                                info);
+                counter++;
+                /* color */
+                if (counter % 2 == 0)
+                    for (int i = 0; i < num_columns; i++)
+                        func_name->setBackground(i, file_brush);
+                file_name->addChild(func_name);
+            }
+            exec_name->addChild(file_name);
+            ++file_itr;
+        }
+        frames_tree_widget->addTopLevelItem(exec_name);
+        ++exec_itr;
+    }
+
+    /* Select first */
+    frames_tree_widget->setCurrentItem(frames_tree_widget->itemAt(0, 0));
+}
+
+/* Private Slot
+ * Specifies behavior of an item in frames_tree_widget when it is
+ * double clicked
+ */
+void
+dr_heapstat_t::frames_tree_widget_double_clicked(QTreeWidgetItem *item, 
+                                                 int column)
+{
+    Qt::ItemFlags tmp = item->flags();
+    if (item->childCount() == 0 || column == 3) {
+        item->setFlags(tmp | Qt::ItemIsEditable);
+    } else if (tmp & Qt::ItemIsEditable) {
+        item->setFlags(tmp ^ Qt::ItemIsEditable);
+    }
 }

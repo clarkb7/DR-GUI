@@ -39,7 +39,8 @@ dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
     setAttribute(Qt::WA_DeleteOnClose);
     view_start_percent = 0;
     view_end_percent = 100;
-    current_snapshot_num = 1;
+    if (options != NULL)
+        current_snapshot_num = options->hide_first_snapshot == true;
     highlighted_point = QPoint(0,0);
     current_graph_modified = mem_alloc_line = padding_line 
                            = headers_line = true;
@@ -99,7 +100,6 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
             draw_heap_data(&data_painter);
             data_painter.end();
             current_graph_modified = false;
-            highlighted_snapshot();
         }
         painter.drawPicture(0,0,current_graph);
         draw_selection(&painter);
@@ -176,7 +176,7 @@ dr_heapstat_graph_t::x_axis_height(void)
 qreal 
 dr_heapstat_graph_t::data_point_x(qreal x) 
 {
-    int max_x = width() - y_axis_width() - 2 * graph_outer_margin;
+    qreal max_x = width() - y_axis_width() - 2 * graph_outer_margin;
     return x * (max_x) / (double)(view_end_percent - view_start_percent);
 }
 
@@ -186,7 +186,7 @@ dr_heapstat_graph_t::data_point_x(qreal x)
 qreal 
 dr_heapstat_graph_t::data_point_y(qreal y) 
 {
-    int max_y = height() - x_axis_height() - 2 * graph_outer_margin;
+    qreal max_y = height() - x_axis_height() - 2 * graph_outer_margin;
     return y * (max_y) / maximum_value.toULong();
 }
 
@@ -300,7 +300,13 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
                                  text_height),
                           QString::number(round(cur_value)),
                           QTextOption(Qt::AlignRight));
+        /* full line */
+        painter->setPen(QColor(0,0,0,25));
+        painter->scale(1,-1);
+        painter->drawLine(QPointF(y_axis_x, y_axis_mark), 
+                          QPointF(right_bound - left_bound, y_axis_mark));
         painter->restore();
+        /* tick */
         painter->drawLine(QPointF(y_axis_x - GRAPH_MARK_WIDTH, y_axis_mark), 
                           QPointF(y_axis_x, y_axis_mark));
 
@@ -504,16 +510,16 @@ dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event)
             view_end_percent = temp;
         }
         /* floating point exception with diff < 2 
-         * From drawing elongated tallies in draw_x_axis
+         * from drawing elongated tallies in draw_x_axis
          * (i % (int)round(diff / 4))
          */
-        if (abs(view_start_percent - view_end_percent) < 2.0000) {
-            view_end_percent = view_start_percent + 2.0000;
+        if (abs(view_start_percent - view_end_percent) < 2.0) {
+            view_end_percent = view_start_percent + 2.0;
         }
         /* limit */
         if (view_start_percent >= 98) {
-            view_end_percent = 100;
-            view_start_percent = 98;
+            view_end_percent = 100.0;
+            view_start_percent = 98.0;
         }
         current_graph_modified = true;
         /* reset selection info */
@@ -522,6 +528,8 @@ dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event)
         first_point.setY(0);
         last_point.setX(0);
         last_point.setY(0);
+
+        highlighted_snapshot();
         update();
     }
 }
@@ -554,7 +562,7 @@ dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event)
 }
 
 /* Protected
- * Adjusts right_bound with change in widget size
+ * Adjusts width or height dependent variables
  */
 void 
 dr_heapstat_graph_t::resizeEvent(QResizeEvent *event) 
@@ -563,6 +571,9 @@ dr_heapstat_graph_t::resizeEvent(QResizeEvent *event)
     /* dependent on width */
     right_bound = left_bound + width() - y_axis_width() - 
                   2 * graph_outer_margin;
+    /* adjust highlighted_point */
+    highlighted_point.setX(data_point_x(highlight_percent));
+    
     current_graph_modified = true;
 }
 
@@ -597,15 +608,15 @@ dr_heapstat_graph_t::highlighted_snapshot(void)
 {
     if(snapshots == NULL)
         return;
-    qreal total_percent_lesser = view_start_percent;
-    qreal total_percent_greater = view_start_percent;
+    qreal total_loc_lesser = view_start_percent;
+    qreal total_loc_greater = view_start_percent;
     qreal total_percent = 0;
     qreal percent_diff = view_end_percent - view_start_percent;
     /* Cursor */
-    qreal highlight_percent = view_start_percent + (highlighted_point.x() 
-                              / (double)(right_bound-left_bound)) 
-                              * percent_diff;
-    highlight_percent = data_point_x(highlight_percent-view_start_percent);
+    highlight_percent = view_start_percent + (highlighted_point.x() 
+                        / (double)(right_bound-left_bound)) 
+                        * percent_diff;
+    qreal highlight_loc = data_point_x(highlight_percent - view_start_percent);
 
     foreach(snapshot_listing *snapshot, *snapshots) {
         if (options->hide_first_snapshot == true &&
@@ -614,16 +625,17 @@ dr_heapstat_graph_t::highlighted_snapshot(void)
         /* Snapshot locs */
         total_percent += (snapshot->num_ticks 
                           / ((double)width_max)) * 100;
-        total_percent_greater = data_point_x(total_percent 
-                                              - view_start_percent);
+        total_loc_greater = data_point_x(total_percent - view_start_percent);
         /* If found */
-        if (highlight_percent >= total_percent_lesser &&
-            highlight_percent <= total_percent_greater) {
+        if (highlight_loc >= total_loc_lesser &&
+            highlight_loc <= total_loc_greater) {
+            if (current_snapshot_num == snapshot->snapshot_num)
+                return;
             emit highlight_changed(snapshot->snapshot_num);
             current_snapshot_num = snapshot->snapshot_num;
             return;
         }
-        total_percent_lesser = total_percent_greater;
+        total_loc_lesser = total_loc_greater;
     }
     return;
 }
@@ -637,6 +649,7 @@ dr_heapstat_graph_t::reset_graph_zoom(void)
     view_start_percent = 0;
     view_end_percent = 100;
     current_graph_modified = true;
+    highlighted_snapshot();
     update();
 }
 
@@ -664,14 +677,20 @@ dr_heapstat_graph_t::draw_view_cursor(QPainter *painter)
     painter->restore();
 }
 
-
+/* Public Slot
+ * Updates data when settings are updated
+ */
 void
 dr_heapstat_graph_t::update_settings(void)
 {
+    highlighted_snapshot();
     current_graph_modified = true;
     set_heap_data(snapshots);
 }
 
+/* Public
+ * Returns true if the graph's data is NULL
+ */
 bool
 dr_heapstat_graph_t::is_null(void) {
     return snapshots == NULL;

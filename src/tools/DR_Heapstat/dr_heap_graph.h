@@ -131,6 +131,7 @@ private:
 
     /* snapshot viewing */
     QPoint highlighted_point;
+    qreal highlight_percent;
     int current_snapshot_num;
 
     /* lines */

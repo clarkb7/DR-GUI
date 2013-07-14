@@ -41,7 +41,7 @@ public:
     ~main_window_t(void);
 
 protected:
-    void close_event(QCloseEvent *event);
+    void closeEvent(QCloseEvent *event);
 
 private slots:
     void 
