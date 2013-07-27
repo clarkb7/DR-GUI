@@ -1,32 +1,39 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: dr_heap_graph.cpp
-** 
-** Defines the Dr. Heapstat heap data graph
-**
-*************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
 
-#ifndef DR_HEAP_GRAPH_H
-#define DR_HEAP_GRAPH_H
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* dhvis_graph.h
+ * 
+ * Defines the Dr. Heapstat heap data graph
+ */
+
+#ifndef DHVIS_GRAPH_H
+#define DHVIS_GRAPH_H
 
 #include <QWidget>
 #include <QPicture>
 
-struct options_t;
-struct snapshot_listing;
+struct dhvis_options_t;
+struct dhvis_snapshot_listing_t;
 
-class dr_heapstat_graph_t : public QWidget 
+class dhvis_graph_t : public QWidget 
 {
     Q_OBJECT
 public:
-    dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
-                        options_t *options_);
+    dhvis_graph_t(QVector<dhvis_snapshot_listing_t *> *vec,
+                  dhvis_options_t *options_);
     
     bool
     is_null(void);
@@ -66,7 +73,7 @@ private:
     highlighted_snapshot(void);
     
     void 
-    set_heap_data(QVector<snapshot_listing *> *vec);
+    set_heap_data(QVector<dhvis_snapshot_listing_t *> *vec);
     
     void 
     draw_empty_graph(QPainter *painter);
@@ -78,7 +85,7 @@ private:
     draw_x_axis(QPainter *painter);
     
     void 
-    draw_helper(QPainter *painter, qreal total_percent, 
+    draw_helper(QPainter *painter, qreal &total_percent, 
                 QPoint *prev_point, qreal *data,
                 bool first_point);
     
@@ -110,7 +117,7 @@ private:
     draw_view_cursor(QPainter *painter);
 
     /* Data */
-    QVector<snapshot_listing*> *snapshots;
+    QVector<dhvis_snapshot_listing_t *> *snapshots;
 
     /* Graph Boundaries */
     qreal graph_outer_margin;
@@ -142,7 +149,7 @@ private:
     bool headers_line;
 
     /* Options */
-    options_t *options;
+    dhvis_options_t *options;
 };
 
 #endif

@@ -1,16 +1,23 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: dr_heap_options.cpp
-** 
-** Provides the DR. Heapstat options page
-**
-*************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
+
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* dhvis_options_page.cpp
+ * 
+ * Provides the DR. Heapstat options page
+ */
 
 #include <QGroupBox>
 #include <QLineEdit>
@@ -24,12 +31,12 @@
 #include <QDebug>
 #include <QFileDialog>
 
-#include "dr_heap_options.h"
+#include "dhvis_options_page.h"
 
 /* Public
  * Constructor
  */
-dr_heapstat_options_t::dr_heapstat_options_t(void) 
+dhvis_options_page_t::dhvis_options_page_t(void) 
 {
     create_layout();
 }
@@ -38,33 +45,33 @@ dr_heapstat_options_t::dr_heapstat_options_t(void)
  * Returns provided tool-names during loading
  */
 QStringList 
-dr_heapstat_options_t::tool_names(void) const 
+dhvis_options_page_t::tool_names(void) const 
 {
     return QStringList() << "Dr. Heapstat";
 }
 
-/* Public
+/* Private
  * Writes settings from the options struct
  */
 void
-dr_heapstat_options_t::write_settings(void) 
+dhvis_options_page_t::write_settings(void) 
 {
     QSettings settings("Dynamorio", "DR-GUI");
-    settings.beginGroup("Dr. Heapstat");
-    settings.setValue("Default load directory", 
+    settings.beginGroup("Dr._Heapstat");
+    settings.setValue("Default_load_directory", 
                       def_load_dir_line_edit->text());
-    settings.setValue("Hide first snapshot", 
-                      ignore_first_snapshot_check_box->isChecked() == true);
-    settings.setValue("Square graph", 
-                       square_graph_check_box->isChecked() == true);
+    settings.setValue("Hide_peak_snapshot", 
+                      hide_peak_snapshot_check_box->isChecked() == true);
+    settings.setValue("Square_graph", 
+                      square_graph_check_box->isChecked() == true);
     settings.setValue("Antialiasing", 
-                       antialiasing_check_box->isChecked() == true);
-    settings.setValue("Number of vertical ticks", num_tabs_spin_box->value());
-    settings.setValue("Number of callstacks per page",  
+                      antialiasing_check_box->isChecked() == true);
+    settings.setValue("Number_of_vertical_ticks", num_tabs_spin_box->value());
+    settings.setValue("Number_of_callstacks_per_page",  
                       num_callstacks_per_page_spin_box->value());
     settings.endGroup();
 
-    /* adjust info */
+    /* Adjust info */
     read_settings();
     emit settings_changed();
 }
@@ -73,45 +80,43 @@ dr_heapstat_options_t::write_settings(void)
  * Reads settings into the options struct
  */
 void
-dr_heapstat_options_t::read_settings(void) 
+dhvis_options_page_t::read_settings(void) 
 {
     if(options == NULL)
         return;
     QSettings settings("Dynamorio", "DR-GUI");
-    settings.beginGroup("Dr. Heapstat");
-    options->def_load_dir = settings.value("Default load directory",
+    settings.beginGroup("Dr._Heapstat");
+    options->def_load_dir = settings.value("Default_load_directory",
                                            QString("/home")).toString();
-    options->hide_first_snapshot = settings.value("Hide first snapshot", 
+    options->hide_peak_snapshot = settings.value("Hide_peak_snapshot", 
                                                   true).toBool();
-    options->square_graph = settings.value("Square graph", false).toBool();
+    options->square_graph = settings.value("Square_graph", false).toBool();
     options->antialiasing_enabled = settings.value("Antialiasing", 
                                                    true).toBool();
-    options->num_vertical_ticks = settings.value("Number of vertical ticks", 
+    options->num_vertical_ticks = settings.value("Number_of_vertical_ticks", 
                                                  10).toInt();
     options->num_callstacks_per_page = settings.value(
-                                               "Number of callstacks per page",
+                                               "Number_of_callstacks_per_page",
                                                50).toInt();
     settings.endGroup();
 
-    /* adjust GUI to reflect new settings */
+    /* Adjust GUI to reflect new settings */
     def_load_dir_line_edit->setText(options->def_load_dir);
-    ignore_first_snapshot_check_box->setChecked(options->hide_first_snapshot
-                                                == true);
+    hide_peak_snapshot_check_box->setChecked(options
+                                             ->hide_peak_snapshot == true);
     square_graph_check_box->setChecked(options->square_graph == true);
     antialiasing_check_box->setChecked(options->antialiasing_enabled == true);
     num_tabs_spin_box->setValue(options->num_vertical_ticks);
-    num_callstacks_per_page_spin_box->setValue(options->
-                                                   num_callstacks_per_page);
+    num_callstacks_per_page_spin_box->setValue(options
+                                               ->num_callstacks_per_page);
 }
 
 /* Private
  * Reads settings into the options struct
  */
 void
-dr_heapstat_options_t::set_options(options_t *options_) 
+dhvis_options_page_t::set_options(dhvis_options_t *options_) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_options_t::set_options"
-                "(options_t *options_)";
     options = options_;
     read_settings();
 }
@@ -120,17 +125,19 @@ dr_heapstat_options_t::set_options(options_t *options_)
  * Creates and connects the GUI
  */
 void
-dr_heapstat_options_t::create_layout(void) 
+dhvis_options_page_t::create_layout(void) 
 {
+    /* General */
     QGroupBox *general_group = new QGroupBox(tr("General"), this);
     QLabel *load_dir_label = new QLabel(tr("Default loading directory:"));
     def_load_dir_line_edit = new QLineEdit(this);
     QPushButton *find_def_load_dir_button = new QPushButton(tr("Select"));
     connect(find_def_load_dir_button, SIGNAL(clicked()),
             this, SLOT(choose_def_load_dir()));
+
+    /* Graph */
     QGroupBox *graph_group = new QGroupBox(tr("Graph"), this);
-    ignore_first_snapshot_check_box = new QCheckBox(tr("Ignore first "
-                                                       "snapshot"));
+    hide_peak_snapshot_check_box = new QCheckBox(tr("Hide peak snapshot"));
     square_graph_check_box = new QCheckBox(tr("Square graph"));
     antialiasing_check_box = new QCheckBox(tr("Antialiasing"));
 
@@ -152,7 +159,7 @@ dr_heapstat_options_t::create_layout(void)
     general_group->setLayout(general_layout);
     
     QGridLayout *graph_layout = new QGridLayout;
-    graph_layout->addWidget(ignore_first_snapshot_check_box, 0, 0);
+    graph_layout->addWidget(hide_peak_snapshot_check_box, 0, 0);
     graph_layout->addWidget(square_graph_check_box, 1, 0);
     graph_layout->addWidget(antialiasing_check_box, 2, 0);
     graph_layout->addWidget(num_tabs_spin_box, 3, 0);
@@ -172,14 +179,14 @@ dr_heapstat_options_t::create_layout(void)
  * User chooses def_load_dir
  */
 void
-dr_heapstat_options_t::choose_def_load_dir(void)
+dhvis_options_page_t::choose_def_load_dir(void)
 {
    QString test_dir;
    test_dir = QFileDialog::getExistingDirectory(this, 
                                                 tr("Open Directory"),
                                                 options->def_load_dir, 
                                                 QFileDialog::ShowDirsOnly);
-   if (test_dir.isEmpty() == true) {
+   if (test_dir.isEmpty()) {
        return;
    }
    /* set text box text */

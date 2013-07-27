@@ -1,19 +1,35 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: dr_heap_graph.cpp
-** 
-** Provides the Dr. Heapstat heap data graph
-**
-*************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
+
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* dhvis_graph.cpp
+ * 
+ * Provides the Dr. Heapstat heap data graph
+ */
+
+#ifdef __CLASS__
+#  undef __CLASS__
+#endif
+#define __CLASS__ "dhvis_graph_t::"
 
 #define GRAPH_MARK_WIDTH 5
-
+/* Fix scale for text, it appears upside down */
+#define DHVIS_DRAW_TEXT(command) painter->save(); \
+                                 painter->scale(1, -1); \
+                                 command; \
+                                 painter->restore();
 #include <QWidget>
 #include <QPainter>
 #include <QPicture>
@@ -23,24 +39,23 @@
 
 #include <cmath>
 
-#include "dr_heap_structures.h"
-#include "dr_heap_tool.h"
-#include "dr_heap_graph.h"
+#include "dhvis_structures.h"
+#include "dhvis_tool.h"
+#include "dhvis_graph.h"
 
 /* Public
  * Constructor
  */
-dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
-                                         options_t *options_)
+dhvis_graph_t::dhvis_graph_t(QVector<dhvis_snapshot_listing_t *> 
+                                         *vec,
+                                         dhvis_options_t *options_)
     :  snapshots(NULL), graph_outer_margin(10), options(options_)
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::dr_heapstat_graph_t"
-                "(QVector<struct snapshot_listing*> *vec)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     setAttribute(Qt::WA_DeleteOnClose);
     view_start_percent = 0;
     view_end_percent = 100;
-    if (options != NULL)
-        current_snapshot_num = options->hide_first_snapshot == true;
+    current_snapshot_num = -1;
     highlighted_point = QPoint(0,0);
     current_graph_modified = mem_alloc_line = padding_line 
                            = headers_line = true;
@@ -51,14 +66,12 @@ dr_heapstat_graph_t::dr_heapstat_graph_t(QVector<snapshot_listing *> *vec,
  * Sets heap data to be visualized
  */
 void 
-dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec) 
+dhvis_graph_t::set_heap_data(QVector<dhvis_snapshot_listing_t *> *vec) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::set_heap_data"
-                "(QVector<struct snapshot_listing*> *vec)";
-    /* memory should be taken care of by tool */
-    if (vec != NULL) {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
+    /* Memory should be taken care of by tool */
+    if (vec != NULL)
         snapshots = vec;        
-    }
     max_height();
     max_width();
 
@@ -77,10 +90,9 @@ dr_heapstat_graph_t::set_heap_data(QVector<struct snapshot_listing *> *vec)
  * Paints an empty canvis or loads data
  */
 void 
-dr_heapstat_graph_t::paintEvent(QPaintEvent *event) 
+dhvis_graph_t::paintEvent(QPaintEvent *event) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::paintEvent"
-                "(QPaintEvent *event)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     QWidget::paintEvent(event);
 
     QPainter painter(this);
@@ -88,12 +100,12 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
     /* Fix origin location */
     painter.translate(left_bound,
                        height() - graph_outer_margin);
-    painter.scale(1,-1);
+    painter.scale(1, -1);
 
-    if (snapshots == NULL || snapshots->isEmpty() == true)
+    if (snapshots == NULL || snapshots->isEmpty())
         draw_empty_graph(&painter);
     else {
-        if(current_graph_modified == true) {
+        if (current_graph_modified) {
             QPainter data_painter(&current_graph);
             draw_x_axis(&data_painter);
             draw_y_axis(&data_painter);
@@ -101,7 +113,7 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
             data_painter.end();
             current_graph_modified = false;
         }
-        painter.drawPicture(0,0,current_graph);
+        painter.drawPicture(0, 0, current_graph);
         draw_selection(&painter);
         draw_view_cursor(&painter);
     }
@@ -111,15 +123,16 @@ dr_heapstat_graph_t::paintEvent(QPaintEvent *event)
  * Calculates max height of y-axis
  */
 void 
-dr_heapstat_graph_t::max_height(void) 
+dhvis_graph_t::max_height(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     qreal height = 0;
     if (snapshots != NULL &&
-        snapshots->isEmpty() == false) {
-        foreach(snapshot_listing *snapshot, *snapshots) {
+        !snapshots->isEmpty()) {
+        foreach (dhvis_snapshot_listing_t *snapshot, *snapshots) {
             if (options != NULL &&
-                options->hide_first_snapshot == true &&
-                snapshot->snapshot_num == 0) {
+                options->hide_peak_snapshot &&
+                snapshot->is_peak) {
                 continue;
             }
             if (snapshot->tot_bytes_occupied > height)
@@ -134,15 +147,16 @@ dr_heapstat_graph_t::max_height(void)
  * Calculates max width of x-axis
  */
 void 
-dr_heapstat_graph_t::max_width(void) 
+dhvis_graph_t::max_width(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     qreal width = 0;
     if (snapshots != NULL &&
-        snapshots->isEmpty() == false) {
-        foreach(snapshot_listing *snapshot, *snapshots) {
+        !snapshots->isEmpty()) {
+        foreach (dhvis_snapshot_listing_t *snapshot, *snapshots) {
             if (options != NULL &&
-                options->hide_first_snapshot == true &&
-                snapshot->snapshot_num == 0) {
+                options->hide_peak_snapshot &&
+                snapshot->is_peak) {
                 continue;
             }
             width += snapshot->num_ticks;
@@ -155,7 +169,7 @@ dr_heapstat_graph_t::max_width(void)
  * Returns width of y_axis
  */
 qreal 
-dr_heapstat_graph_t::y_axis_width(void) 
+dhvis_graph_t::y_axis_width(void) 
 {
     return text_width + 5;
 }
@@ -165,7 +179,7 @@ dr_heapstat_graph_t::y_axis_width(void)
  */
 /* XXX: no text on x-axis, probably don't need */
 qreal 
-dr_heapstat_graph_t::x_axis_height(void) 
+dhvis_graph_t::x_axis_height(void) 
 {
     return text_height + 5;
 }
@@ -174,7 +188,7 @@ dr_heapstat_graph_t::x_axis_height(void)
  * Calculates x-coord for given data
  */
 qreal 
-dr_heapstat_graph_t::data_point_x(qreal x) 
+dhvis_graph_t::data_point_x(qreal x) 
 {
     qreal max_x = width() - y_axis_width() - 2 * graph_outer_margin;
     return x * (max_x) / (double)(view_end_percent - view_start_percent);
@@ -184,7 +198,7 @@ dr_heapstat_graph_t::data_point_x(qreal x)
  * Calculates y-coord for given data
  */
 qreal 
-dr_heapstat_graph_t::data_point_y(qreal y) 
+dhvis_graph_t::data_point_y(qreal y) 
 {
     qreal max_y = height() - x_axis_height() - 2 * graph_outer_margin;
     return y * (max_y) / maximum_value.toULong();
@@ -194,10 +208,9 @@ dr_heapstat_graph_t::data_point_y(qreal y)
  * Draws an empty graph when no data is present
  */
 void 
-dr_heapstat_graph_t::draw_empty_graph(QPainter *painter) 
+dhvis_graph_t::draw_empty_graph(QPainter *painter) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_empty_graph"
-                "(QPainter *painter)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     QString msg("No datapoints available!");
 
     qreal center_x = width() / 2;
@@ -210,21 +223,16 @@ dr_heapstat_graph_t::draw_empty_graph(QPainter *painter)
     qreal msg_x = center_x - (msg_width / 2);
     qreal msg_y = center_y - (msg_height / 2);
     
-    /* fix scale for text, it appears upside down */
-    painter->save();
-    painter->scale(1,-1);
-    painter->drawText(QPointF(msg_x, msg_y), msg);
-    painter->restore();
+    DHVIS_DRAW_TEXT(painter->drawText(QPointF(msg_x, -msg_y), msg))
 }
 
 /* Private
- *  Draws the x-axis
+ * Draws the x-axis
  */
 void 
-dr_heapstat_graph_t::draw_x_axis(QPainter *painter) 
+dhvis_graph_t::draw_x_axis(QPainter *painter) 
 {
-   qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_x_axis"
-               "(QPainter *painter)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     painter->save();
 
     QPen x_axis_pen(QColor(qRgb(0, 0, 0)));
@@ -240,11 +248,11 @@ dr_heapstat_graph_t::draw_x_axis(QPainter *painter)
     qreal x_axis_mark = x_axis_x;
     qreal mark_width;
     qreal percent_diff = (view_end_percent - view_start_percent);
-    /* floating point exception check */
+    /* Floating point exception check */
     if (percent_diff < 2.0)
         percent_diff = 2.0;
     /* Draw tallies based on % */
-    for(qreal i = 0; i <= percent_diff; i++) {
+    for (qreal i = 0; i <= percent_diff; i++) {
         mark_width = x_axis_y - GRAPH_MARK_WIDTH;
         if ((int)i % (int)round(percent_diff / 4.0) == 0) 
             mark_width -= 2;
@@ -252,21 +260,19 @@ dr_heapstat_graph_t::draw_x_axis(QPainter *painter)
                           QPointF(x_axis_mark, mark_width));
 
         /* Adjust count */
-        x_axis_mark += (x_axis_width-x_axis_x)
-                        / percent_diff;
+        x_axis_mark += (x_axis_width-x_axis_x) / percent_diff;
     }
 
     painter->restore();
 }
 
 /* Private
- * draws y-axis and scale labels
+ * Draws y-axis and scale labels
  */
 void 
-dr_heapstat_graph_t::draw_y_axis(QPainter *painter) 
+dhvis_graph_t::draw_y_axis(QPainter *painter) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_y_axis"
-                "(QPainter *painter)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     painter->save();
 
     QPen y_axis_pen(QColor(qRgb(0, 0, 0)));
@@ -291,22 +297,22 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
             cur_value = max_val;
             y_axis_mark = y_axis_height;
         }
-        /* fix scale for text, it appears upside down */
+        QRectF text_space(-(text_width + graph_outer_margin), 
+                          -(y_axis_mark + text_height / 2),
+                          text_width,
+                          text_height);
+        DHVIS_DRAW_TEXT(painter->drawText(text_space,
+                                          QString::number(round(cur_value)),
+                                          QTextOption(Qt::AlignRight)))
+        /* Cross-graph line 
+         * save since diff color
+         */
         painter->save();
-        painter->scale(1,-1);
-        painter->drawText(QRectF(-(text_width + graph_outer_margin), 
-                                 -(y_axis_mark + text_height/2),
-                                 text_width,
-                                 text_height),
-                          QString::number(round(cur_value)),
-                          QTextOption(Qt::AlignRight));
-        /* full line */
         painter->setPen(QColor(0,0,0,25));
-        painter->scale(1,-1);
         painter->drawLine(QPointF(y_axis_x, y_axis_mark), 
                           QPointF(right_bound - left_bound, y_axis_mark));
         painter->restore();
-        /* tick */
+        /* Axis tick */
         painter->drawLine(QPointF(y_axis_x - GRAPH_MARK_WIDTH, y_axis_mark), 
                           QPointF(y_axis_x, y_axis_mark));
 
@@ -321,16 +327,16 @@ dr_heapstat_graph_t::draw_y_axis(QPainter *painter)
  * Helps draw_heap_data(...) graph data
  */
 void 
-dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent, 
-                                 QPoint *prev_point, qreal *data,
-                                 bool first) 
+dhvis_graph_t::draw_helper(QPainter *painter, qreal &total_percent, 
+                           QPoint *prev_point, qreal *data,
+                           bool first) 
 {
     qreal dp_x = data_point_x(total_percent - view_start_percent);
     qreal dp_y = data_point_y(*data);
     
     /* Place first point at correct loc */
-    if (first == true) {
-        if(options->square_graph == false) {
+    if (first) {
+        if(!options->square_graph) {
             qreal slope = (dp_y - prev_point->y()) / 
                           (double)(dp_x - prev_point->x());
             prev_point->setY(slope * (0 - prev_point->x()) + prev_point->y());
@@ -340,7 +346,7 @@ dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent,
         prev_point->setX(0);
     }
 
-    /* square graph */
+    /* Square graph */
     if(options->square_graph == true) {
         QPoint mid_point(prev_point->x(), dp_y);
         painter->drawLine(*prev_point, mid_point);
@@ -348,8 +354,6 @@ dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent,
         prev_point->setX(mid_point.x());
         prev_point->setY(mid_point.y());
     }
-
-
 
     QPoint this_point(dp_x, dp_y);
     painter->drawLine(*prev_point, this_point);
@@ -361,11 +365,20 @@ dr_heapstat_graph_t::draw_helper(QPainter *painter, qreal total_percent,
 /* Private
  * Graphs data
  */
+#define DHVIS_MAKE_PREV_POINTS(loc, num) \
+            prev_points.data()[loc] = QPoint(start_x_val, \
+                                            data_point_y(num));
+#define DHVIS_DRAW_POINTS(color, loc, num) \
+            data_point_pen.setColor(color); \
+            painter->setPen(data_point_pen); \
+            draw_helper(painter, total_percent, \
+                        &prev_points.data()[loc], \
+                        num, \
+                        first);
 void 
-dr_heapstat_graph_t::draw_heap_data(QPainter *painter) 
+dhvis_graph_t::draw_heap_data(QPainter *painter) 
 {
-    qDebug() << "INFO: Entering dr_heapstat_graph_t::draw_heap_data"
-                "(QPainter *painter)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     painter->save();
 
     qreal total_percent = 0;
@@ -385,72 +398,57 @@ dr_heapstat_graph_t::draw_heap_data(QPainter *painter)
 
     bool first = true;
     bool last = false;
-    foreach(snapshot_listing *snapshot, *snapshots) {
-        if (options->hide_first_snapshot == true &&
-            snapshot->snapshot_num == 0) {
+    foreach (dhvis_snapshot_listing_t *snapshot, *snapshots) {
+        if (options->hide_peak_snapshot &&
+            snapshot->is_peak) {
             continue;
         }
 
         total_percent += (snapshot->num_ticks / ((double)width_max)) * 100;
         if (total_percent < view_start_percent) {
-            prev_points.data()[0] = QPoint(data_point_x(total_percent -
-                                                        view_start_percent),
-                                           data_point_y(snapshot->
-                                                         tot_bytes_asked_for));
-            prev_points.data()[1] = QPoint(data_point_x(total_percent -
-                                                        view_start_percent),
-                                           data_point_y(snapshot->
-                                                         tot_bytes_usable));
-            prev_points.data()[2] = QPoint(data_point_x(total_percent -
-                                                        view_start_percent),
-                                           data_point_y(snapshot->
-                                                         tot_bytes_occupied));
+            qreal start_x_val = data_point_x(total_percent - 
+                                             view_start_percent);
+            DHVIS_MAKE_PREV_POINTS(0, snapshot->tot_bytes_asked_for)
+            DHVIS_MAKE_PREV_POINTS(1, snapshot->tot_bytes_usable)
+            DHVIS_MAKE_PREV_POINTS(2, snapshot->tot_bytes_occupied)
             continue;
         } 
 
-        if (last == true) {
+        if (last) {
             break;
         } else if (total_percent > view_end_percent) {
             last = true;
         }
-
+        
         if (mem_alloc_line == true) {
-            data_point_pen.setColor(QColor(255, 102, 0));
-            painter->setPen(data_point_pen);
-            draw_helper(painter, total_percent, 
-                        &prev_points.data()[0], 
-                        &snapshot->tot_bytes_asked_for,
-                        first);
+            DHVIS_DRAW_POINTS(QColor(255, 102, 0), 0, 
+                              &snapshot->tot_bytes_asked_for)
         }
         if (padding_line == true) {
-            data_point_pen.setColor(QColor(0, 204, 0));
-            painter->setPen(data_point_pen);
-            draw_helper(painter, total_percent, 
-                        &prev_points.data()[1], 
-                        &snapshot->tot_bytes_usable,
-                        first);
+            DHVIS_DRAW_POINTS(QColor(0, 204, 0), 1, 
+                              &snapshot->tot_bytes_usable)
         }
         if (headers_line == true) {
-            data_point_pen.setColor(QColor(27, 168, 188));
-            painter->setPen(data_point_pen);
-            draw_helper(painter, total_percent, 
-                        &prev_points.data()[2], 
-                        &snapshot->tot_bytes_occupied,
-                        first);
+            DHVIS_DRAW_POINTS(QColor(27, 168, 188), 2, 
+                              &snapshot->tot_bytes_occupied)
         }
         first = false;
+
     }
     painter->restore();
 }
+#undef DHVIS_DRAW_POINTS
+#undef DHVIS_MAKE_PREV_POINTS
 
 /* Private
  * Draws a rectangle for a selection zoom guide
  */
 void 
-dr_heapstat_graph_t::draw_selection(QPainter *painter) 
+dhvis_graph_t::draw_selection(QPainter *painter) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     painter->save();
-    /* transparency == 40 */
+    /* Transparency == 40 */
     QColor selection_color(0, 203, 204, 40);
     painter->setPen(QPen(selection_color));
     painter->setBrush(QBrush(selection_color, Qt::SolidPattern));
@@ -464,8 +462,9 @@ dr_heapstat_graph_t::draw_selection(QPainter *painter)
  *   -Selection Zoom
  */
 void 
-dr_heapstat_graph_t::mousePressEvent(QMouseEvent *event) 
+dhvis_graph_t::mousePressEvent(QMouseEvent *event) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     qreal x_val = event->pos().x();
     /* Check bounds */
     if (x_val < left_bound) {
@@ -486,8 +485,9 @@ dr_heapstat_graph_t::mousePressEvent(QMouseEvent *event)
  *   -Selection Zoom
  */
 void 
-dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event) 
+dhvis_graph_t::mouseReleaseEvent(QMouseEvent *event) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     if (event->button() == Qt::RightButton) {
         /* set vars to adjust graph
          * then adjust graph 
@@ -540,8 +540,9 @@ dr_heapstat_graph_t::mouseReleaseEvent(QMouseEvent *event)
  *   -Snapshot Highlighting
  */
 void 
-dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event) 
+dhvis_graph_t::mouseMoveEvent(QMouseEvent *event) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     qreal x_val = event->pos().x();
     /* Check bounds */
     if (event->pos().x() < left_bound) {
@@ -558,20 +559,20 @@ dr_heapstat_graph_t::mouseMoveEvent(QMouseEvent *event)
         highlighted_point.setX(x_val-left_bound);
         highlighted_snapshot();
     }
-        update();
+    update();
 }
 
 /* Protected
  * Adjusts width or height dependent variables
  */
 void 
-dr_heapstat_graph_t::resizeEvent(QResizeEvent *event) 
+dhvis_graph_t::resizeEvent(QResizeEvent *event) 
 {
     Q_UNUSED(event);
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     /* dependent on width */
     right_bound = left_bound + width() - y_axis_width() - 
                   2 * graph_outer_margin;
-    /* adjust highlighted_point */
     highlighted_point.setX(data_point_x(highlight_percent));
     
     current_graph_modified = true;
@@ -581,8 +582,9 @@ dr_heapstat_graph_t::resizeEvent(QResizeEvent *event)
  * dis/en/ables line drawing
  */
 void 
-dr_heapstat_graph_t::refresh_lines(int line, bool state) 
+dhvis_graph_t::refresh_lines(int line, bool state) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     switch (line) {
         case 0:
             mem_alloc_line = state;
@@ -604,8 +606,9 @@ dr_heapstat_graph_t::refresh_lines(int line, bool state)
  * Finds which snapshot to highlight according to slider position
  */
 void 
-dr_heapstat_graph_t::highlighted_snapshot(void) 
+dhvis_graph_t::highlighted_snapshot(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     if(snapshots == NULL)
         return;
     qreal total_loc_lesser = view_start_percent;
@@ -613,18 +616,18 @@ dr_heapstat_graph_t::highlighted_snapshot(void)
     qreal total_percent = 0;
     qreal percent_diff = view_end_percent - view_start_percent;
     /* Cursor */
-    highlight_percent = view_start_percent + (highlighted_point.x() 
-                        / (double)(right_bound-left_bound)) 
-                        * percent_diff;
+    highlight_percent = view_start_percent + ((double)highlighted_point.x() /
+                                              (right_bound - left_bound)) *
+                                             percent_diff;
     qreal highlight_loc = data_point_x(highlight_percent - view_start_percent);
 
-    foreach(snapshot_listing *snapshot, *snapshots) {
-        if (options->hide_first_snapshot == true &&
-            snapshot->snapshot_num == 0)
+    foreach (dhvis_snapshot_listing_t *snapshot, *snapshots) {
+        if (options->hide_peak_snapshot &&
+            snapshot->is_peak)
             continue;
         /* Snapshot locs */
-        total_percent += (snapshot->num_ticks 
-                          / ((double)width_max)) * 100;
+        total_percent += (snapshot->num_ticks /
+                         ((double)width_max)) * 100;
         total_loc_greater = data_point_x(total_percent - view_start_percent);
         /* If found */
         if (highlight_loc >= total_loc_lesser &&
@@ -644,8 +647,9 @@ dr_heapstat_graph_t::highlighted_snapshot(void)
  * resets the selection zoom on the graph
  */
 void 
-dr_heapstat_graph_t::reset_graph_zoom(void) 
+dhvis_graph_t::reset_graph_zoom(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     view_start_percent = 0;
     view_end_percent = 100;
     current_graph_modified = true;
@@ -654,26 +658,25 @@ dr_heapstat_graph_t::reset_graph_zoom(void)
 }
 
 /* Private
- * draws view cursor
+ * Draws the view cursor
  */
 void
-dr_heapstat_graph_t::draw_view_cursor(QPainter *painter) 
+dhvis_graph_t::draw_view_cursor(QPainter *painter) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     painter->save();
-    /* draw cursor line */
-    painter->drawLine(QPoint(highlighted_point.x(),0),
-                      QPoint(highlighted_point.x(),height()));
-    /* draw snapshot num */
-    /* fix scale for text, it appears upside down */
-    painter->save();
-    painter->scale(1,-1);
-    painter->drawText(QRectF(highlighted_point.x() - 3 - text_width,
-                             -(height() - 1.5 * graph_outer_margin),
-                             text_width,
-                             text_height),
-                      "#" + QString::number(current_snapshot_num),
-                      QTextOption(Qt::AlignRight));
-    painter->restore();
+    /* Draw cursor line */
+    painter->drawLine(QPoint(highlighted_point.x(), 0),
+                      QPoint(highlighted_point.x(), height()));
+    /* Draw snapshot num */
+    QRectF text_space(highlighted_point.x() - 3 - text_width,
+                     -(height() - 1.5 * graph_outer_margin),
+                     text_width,
+                     text_height);
+    DHVIS_DRAW_TEXT(painter->drawText(text_space,
+                                      "#" + 
+                                      QString::number(current_snapshot_num),
+                                      QTextOption(Qt::AlignRight)))
     painter->restore();
 }
 
@@ -681,8 +684,9 @@ dr_heapstat_graph_t::draw_view_cursor(QPainter *painter)
  * Updates data when settings are updated
  */
 void
-dr_heapstat_graph_t::update_settings(void)
+dhvis_graph_t::update_settings(void)
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     highlighted_snapshot();
     current_graph_modified = true;
     set_heap_data(snapshots);
@@ -692,6 +696,6 @@ dr_heapstat_graph_t::update_settings(void)
  * Returns true if the graph's data is NULL
  */
 bool
-dr_heapstat_graph_t::is_null(void) {
+dhvis_graph_t::is_null(void) {
     return snapshots == NULL;
 }

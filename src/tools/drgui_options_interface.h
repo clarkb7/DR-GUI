@@ -6,18 +6,18 @@
 ** modification, are permitted provided that the conditions outlined in
 ** the COPYRIGHT file are met:
 ** 
-** File: options_interface.h
+** File: drgui_options_interface.h
 ** 
 ** Defines the interface for the options pages for tools
 **
 *************************************************************************/
 
-#ifndef OPTIONS_INTERFACE_H
-#define OPTIONS_INTERFACE_H
+#ifndef DRGUI_OPTIONS_INTERFACE_H
+#define DRGUI_OPTIONS_INTERFACE_H
 
 #include <QWidget>
 
-class options_interface_t : public QWidget
+class drgui_options_interface_t : public QWidget
 {
     Q_OBJECT
     
@@ -29,10 +29,14 @@ public:
     void
     write_settings(void) = 0;
 
+    virtual
+    void
+    read_settings(void) = 0;
+
 };
 
-#define OptionsInterface_iid "org.DR-GUI.OptionsInterface"
+#define DrGUI_OptionsInterface_iid "org.DR-GUI.OptionsInterface"
 
-Q_DECLARE_INTERFACE(options_interface_t, OptionsInterface_iid)
+Q_DECLARE_INTERFACE(drgui_options_interface_t, DrGUI_OptionsInterface_iid)
 
 #endif

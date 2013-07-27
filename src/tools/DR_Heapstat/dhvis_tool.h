@@ -1,19 +1,26 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: dr_heap_tool.h
-** 
-** Defines the DR. Heapstat tool
-**
-*************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
 
-#ifndef DR_HEAP_TOOL_H
-#define DR_HEAP_TOOL_H
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* dhvis_tool.h
+ * 
+ * Defines the DR. Heapstat tool
+ */
+
+#ifndef DHVIS_TOOL_H
+#define DHVIS_TOOL_H
 
 #include <QWidget>
 
@@ -34,19 +41,20 @@ class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
 
-class dr_heapstat_graph_t;
-struct options_t;
-struct snapshot_listing;
-struct callstack_listing;
+class dhvis_graph_t;
+class dhvis_stale_graph_t;
+struct dhvis_options_t;
+struct dhvis_snapshot_listing_t;
+struct dhvis_callstack_listing_t;
 
-class dr_heapstat_t : public QWidget
+class dhvis_tool_t : public QWidget
 {
     Q_OBJECT
 
 public:
-    dr_heapstat_t(options_t *options_);
+    dhvis_tool_t(dhvis_options_t *options_);
 
-    ~dr_heapstat_t(void);
+    ~dhvis_tool_t(void);
 
     void
     update_settings(void);
@@ -56,13 +64,13 @@ private slots:
     load_results(void);
 
     void 
-    fill_callstacks_table(int snapshot);
-
-    void 
     log_dir_text_changed_slot(void);
 
     void 
     draw_snapshot_graph(void);
+    
+    void
+    draw_staleness_graph(void);
 
     void 
     change_lines(void);
@@ -79,10 +87,14 @@ private slots:
     void
     frames_tree_widget_double_clicked(QTreeWidgetItem *item, int column);
 
-private:
-    void 
-    create_actions(void);
+    void
+    highlight_changed(int snapshot);
 
+signals:
+    void
+    code_editor_requested(QFile &file, int line_num);
+
+private:
     void 
     create_layout(void);
 
@@ -96,10 +108,13 @@ private:
     read_log_data(void);
 
     void 
+    fill_callstacks_table(void);
+
+    void 
     load_frames_text_edit(int current_row);
 
     void 
-    load_frames_tree_widget(int current_row);
+    load_frames_tree_widget(void);
 
     /* GUI */
     QGridLayout *main_layout;
@@ -111,7 +126,7 @@ private:
 
     QGridLayout *left_side;
     QLabel *graph_title;
-    dr_heapstat_graph_t *snapshot_graph;
+    dhvis_graph_t *snapshot_graph;
     QPushButton *reset_graph_zoom_button;
 
     QVBoxLayout *check_box_layout;
@@ -143,16 +158,19 @@ private:
     QPushButton *expand_all_button;
     QPushButton *collapse_all_button;
 
+    dhvis_stale_graph_t *staleness_graph;
+
     QString log_dir_loc;
     
     /* Data */
-    QVector<callstack_listing *> callstacks;
-    QVector<snapshot_listing *> snapshots;
+    QVector<dhvis_callstack_listing_t *> callstacks;
+    QVector<dhvis_snapshot_listing_t *> snapshots;
+    QString time_unit;
     int callstacks_display_page;
     int current_snapshot_num;
 
     /* Options */
-    options_t *options;
+    dhvis_options_t *options;
 };
 
 #endif

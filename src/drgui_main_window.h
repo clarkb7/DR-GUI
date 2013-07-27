@@ -1,19 +1,26 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: mainwindow.h
-** 
-** Defines a main structure for users to interface with tools.
-**
-**************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
 
-#ifndef MAIN_WINDOW_H
-#define MAIN_WINDOW_H
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* drgui_main_window.h
+ * 
+ * Defines a main structure for users to interface with tools.
+ */
+
+#ifndef DRGUI_MAIN_WINDOW_H
+#define DRGUI_MAIN_WINDOW_H
 
 #include <QDir>
 #include <QMainWindow>
@@ -29,16 +36,16 @@ class QSignalMapper;
 class QActionGroup;
 class QPluginLoader;
 
-class options_window_t;
-class tool_interface_t;
+class drgui_options_window_t;
+class drgui_tool_interface_t;
 
-class main_window_t : public QMainWindow
+class drgui_main_window_t : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    main_window_t(void);
-    ~main_window_t(void);
+    drgui_main_window_t(void);
+    ~drgui_main_window_t(void);
 
 protected:
     void closeEvent(QCloseEvent *event);
@@ -79,6 +86,9 @@ private slots:
     
     void 
     activate_previous_tab(void);
+
+    void
+    create_code_editor(QFile &file, int line_num);
     
 private:
     void 
@@ -121,7 +131,7 @@ private:
 
     QMenu *edit_menu;
     QAction *preferences_act;
-    options_window_t *opt_win;
+    drgui_options_window_t *opt_win;
 
     QMenu *window_menu;
     QAction *close_act;
@@ -135,7 +145,10 @@ private:
 
     QMenu *tool_menu;
 
-    QVector<tool_interface_t *> plugins;
+    QVector<drgui_tool_interface_t *> plugins;
+
+    /* options */
+    QString custom_command_format;
 };
 
 #endif

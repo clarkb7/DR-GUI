@@ -6,29 +6,29 @@
 ** modification, are permitted provided that the conditions outlined in
 ** the COPYRIGHT file are met:
 ** 
-** File: dr_heap_options.h
+** File: code_editor_options.h
 ** 
-** Defines the DR. Heapstat options page
+** Defines the code_editor options page
 **
 *************************************************************************/
 
-#ifndef DR_HEAPSTAT_OPTIONS_H
-#define DR_HEAPSTAT_OPTIONS_H
+#ifndef CODE_EDITOR_OPTIONS_H
+#define CODE_EDITOR_OPTIONS_H
 
-#include "tools/options_interface.h"
-#include "dr_heap_structures.h"
+#include "tools/drgui_options_interface.h"
+#include "code_editor_structures.h"
 
 class QSpinBox;
 class QLineEdit;
 class QCheckBox;
 
-class dr_heapstat_options_t : public options_interface_t 
+class code_editor_options_page_t : public drgui_options_interface_t 
 {
     Q_OBJECT
-    Q_INTERFACES(options_interface_t)
+    Q_INTERFACES(drgui_options_interface_t)
 
 public:
-    dr_heapstat_options_t(void);
+    code_editor_options_page_t(void);
 
     QStringList 
     tool_names(void) const;
@@ -39,10 +39,6 @@ public:
 signals:
     void
     settings_changed(void);
-
-private slots:
-    void
-    choose_def_load_dir(void);
     
 private:
     void
@@ -57,12 +53,7 @@ private:
     options_t *options;
 
     /* GUI */
-    QLineEdit *def_load_dir_line_edit;
-    QCheckBox *ignore_first_snapshot_check_box;
-    QCheckBox *square_graph_check_box;
-    QCheckBox *antialiasing_check_box;
-    QSpinBox *num_tabs_spin_box;
-    QSpinBox *num_callstacks_per_page_spin_box;
+
 };
 
 #endif

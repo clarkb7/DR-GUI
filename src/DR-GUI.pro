@@ -1,14 +1,12 @@
 QT += widgets
 QMAKE_CXXFLAGS += -g -Wall
-HEADERS       = mainwindow.h \
-                tools/toolbase.h \
-                options/options_window.h
+HEADERS       = tools/drgui_tool_interface.h \
+                drgui_main_window.h \
+                options/drgui_options_window.h
                 
 SOURCES       = main.cpp \
-                mainwindow.cpp \
-                \
-                tools/toolbase.cpp \
-                options/options_window.cpp
+                drgui_main_window.cpp \
+                options/drgui_options_window.cpp
                 
 LIBS          = -L./tools
 

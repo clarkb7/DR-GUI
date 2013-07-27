@@ -1,29 +1,42 @@
-/**************************************************************************
-** Copyright (c) 2013, Branden Clark
-** All rights reserved.
-** 
-** Redistribution and use in source and binary forms, with or without 
-** modification, are permitted provided that the conditions outlined in
-** the COPYRIGHT file are met:
-** 
-** File: mainwindow.cpp
-** 
-** Provides a main structure for users to interface with tools.
-**
-**************************************************************************/
+/* **********************************************************
+ * Copyright (c) 2013, Branden Clark All rights reserved.
+ * **********************************************************/
+
+/* Dr. Heapstat Visualizer
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the conditions outlined in
+ * the BSD 2-Clause license are met.
+ 
+ * This software is provided by the copyright holders and contributors "AS IS"
+ * and any express or implied warranties, including, but not limited to, the
+ * implied warranties of merchantability and fitness for a particular purpose
+ * are disclaimed. See the BSD 2-Clause license for more details.
+ */
+
+/* drgui_main_window.cpp
+ * 
+ * Provides a main structure for users to interface with tools.
+ */
+
+#ifdef __CLASS__
+#  undef __CLASS__
+#endif
+#define __CLASS__ "drgui_main_window_t::"
 
 #include <QtWidgets>
 #include <QActionGroup>
 
-#include "options/options_window.h"
-#include "mainwindow.h"
-#include "tools/toolbase.h"
+#include "options/drgui_options_window.h"
+#include "drgui_main_window.h"
+#include "tools/drgui_tool_interface.h"
 
 /* Public
  * Constructor, everything begins here
  */
-main_window_t::main_window_t(void) 
+drgui_main_window_t::drgui_main_window_t(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     window_mapper = new QSignalMapper(this);
     tab_area = new QTabWidget(this);
     tab_area->setTabsClosable(true);
@@ -40,21 +53,22 @@ main_window_t::main_window_t(void)
     create_status_bar();
     update_menus();
     load_tools();
+    opt_win = new drgui_options_window_t(tool_action_group);
 
     read_settings();
 
-    setWindowTitle(tr("DR-GUI"));
+    setWindowTitle(tr("DrGUI"));
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
 /* Public
  * Destructor
  */
-main_window_t::~main_window_t(void) 
+drgui_main_window_t::~drgui_main_window_t(void) 
 {
-    qDebug() << "INFO: Entering main_window_t::~main_window_t(void)";
-    for (int i = 0; i < plugins.count();) {
-        tool_interface_t *plugin = plugins.back();
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
+    while (plugins.count() > 0) {
+        drgui_tool_interface_t *plugin = plugins.back();
         plugins.pop_back();
         delete plugin;
     }
@@ -65,14 +79,17 @@ main_window_t::~main_window_t(void)
  * Handles closing of all tabs
  */
 void 
-main_window_t::closeEvent(QCloseEvent *event) 
+drgui_main_window_t::closeEvent(QCloseEvent *event) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     close_all_tabs();
     if (tab_area->currentWidget() != NULL) {
         event->ignore();
     } else {
         write_settings();
         event->accept();
+        /* ensure child windows close */
+        qApp->quit();
     }
 }
 
@@ -80,7 +97,7 @@ main_window_t::closeEvent(QCloseEvent *event)
  * Shows about page for this program
  */
 void 
-main_window_t::about(void) 
+drgui_main_window_t::about(void) 
 {
    QMessageBox::about(this, tr("About DR-GUI"),
                       tr("<center><b>DR-GUI</b></center><br>"
@@ -91,7 +108,7 @@ main_window_t::about(void)
  * Updates the menus to reflect current tab's abilities
  */
 void 
-main_window_t::update_menus(void) 
+drgui_main_window_t::update_menus(void) 
 {
     bool has_tool_base = (active_tool() != 0);
     close_act->setEnabled(has_tool_base);
@@ -105,7 +122,7 @@ main_window_t::update_menus(void)
  * Updates the Window menu to reflect current tab's abilities
  */
 void 
-main_window_t::update_window_menu(void) 
+drgui_main_window_t::update_window_menu(void) 
 {
     window_menu->clear();
     window_menu->addAction(close_act);
@@ -143,7 +160,7 @@ main_window_t::update_window_menu(void)
  * Creates and connects the actions for the mainwindow
  */
 void 
-main_window_t::create_actions(void) 
+drgui_main_window_t::create_actions(void) 
 {
     separator_act = new QAction(this);
     separator_act->setSeparator(true);
@@ -180,8 +197,7 @@ main_window_t::create_actions(void)
 
     previous_act = new QAction(tr("Pre&vious"), this);
     previous_act->setShortcuts(QKeySequence::PreviousChild);
-    previous_act->setStatusTip(tr("Move the focus to the previous "
-                                  "tab"));
+    previous_act->setStatusTip(tr("Move the focus to the previous tab"));
     connect(previous_act, SIGNAL(triggered()),
             this, SLOT(activate_previous_tab()));
 
@@ -198,15 +214,13 @@ main_window_t::create_actions(void)
 
     /* Tools */
     tool_action_group = new QActionGroup(this);
-    opt_win = new options_window_t(tool_action_group);
-
 }
 
 /* Private
  * Creates the menus in the menu bar of the mainwindow
  */
 void 
-main_window_t::create_menus(void) 
+drgui_main_window_t::create_menus(void) 
 {
     file_menu = menuBar()->addMenu(tr("&File"));
     file_menu->addSeparator();
@@ -236,17 +250,18 @@ main_window_t::create_menus(void)
  * Creates status bar for displaying status tips
  */
 void 
-main_window_t::create_status_bar(void) 
+drgui_main_window_t::create_status_bar(void) 
 {
     statusBar()->showMessage(tr("Ready"));
 }
 
 /* Private
- * loads ini settings for mainwindow
+ * loads settings for mainwindow
  */
 void 
-main_window_t::read_settings(void) 
+drgui_main_window_t::read_settings(void) 
 {
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     QSettings settings("Dynamorio", "DR-GUI");
     QPoint pos = settings.value("pos", QPoint(200, 200)).toPoint();
     QSize size = settings.value("size", QSize(400, 400)).toSize();
@@ -255,12 +270,12 @@ main_window_t::read_settings(void)
 }
 
 /* Private
- * Saves ini settings for mainwindow
+ * Saves settings for mainwindow
  */
 void 
-main_window_t::write_settings(void) 
+drgui_main_window_t::write_settings(void) 
 {
-    qDebug() << "INFO: Entering main_window_t::write_settings(void)";
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
     QSettings settings("Dynamorio", "DR-GUI");
     settings.setValue("pos", pos());
     settings.setValue("size", size());
@@ -270,7 +285,7 @@ main_window_t::write_settings(void)
  * Switches direction of layout for mainwindow
  */
 void 
-main_window_t::switch_layout_direction(void) 
+drgui_main_window_t::switch_layout_direction(void) 
 {
     if (layoutDirection() == Qt::LeftToRight)
         qApp->setLayoutDirection(Qt::RightToLeft);
@@ -282,7 +297,7 @@ main_window_t::switch_layout_direction(void)
  * finds and returns active ToolBase tab, if there is one
  */
 QWidget *
-main_window_t::active_tool(void) 
+drgui_main_window_t::active_tool(void) 
 {
     int active_tab = tab_area->currentIndex();
     if (active_tab != -1)
@@ -294,7 +309,7 @@ main_window_t::active_tool(void)
  * Displays preferences dialog
  */
 void 
-main_window_t::show_preferences_dialog(void) 
+drgui_main_window_t::show_preferences_dialog(void) 
 {
     if (opt_win != NULL) {
         opt_win->display();
@@ -305,10 +320,9 @@ main_window_t::show_preferences_dialog(void)
  * Closes every tab in mainwindow
  */
 void 
-main_window_t::close_all_tabs(void) 
+drgui_main_window_t::close_all_tabs(void) 
 {
-    int max = tab_area->count();
-    for (int tab_count = 0; tab_count < max; ++tab_count) {
+    while (tab_area->count() > 0) {
         tab_area->removeTab(0);
     }
 }
@@ -317,7 +331,7 @@ main_window_t::close_all_tabs(void)
  * helper for closing current tab
  */
 void 
-main_window_t::maybe_close_me(void) 
+drgui_main_window_t::maybe_close_me(void) 
 {
     maybe_close(tab_area->currentIndex());
 }
@@ -326,12 +340,12 @@ main_window_t::maybe_close_me(void)
  * Confirms closing of a tab
  */
 void 
-main_window_t::maybe_close(int index) 
+drgui_main_window_t::maybe_close(int index) 
 {
     QMessageBox::StandardButton ret;
     ret = QMessageBox::warning(this, tr("Confirm"),
                                tr("Are you sure you want to close '%1'?")
-                                   .arg(tab_area->tabText(index)),
+                               .arg(tab_area->tabText(index)),
                                QMessageBox::Yes | QMessageBox::No |
                                QMessageBox::Cancel);
     if (ret == QMessageBox::Yes)
@@ -339,19 +353,19 @@ main_window_t::maybe_close(int index)
 }
 
 /* Private Slot
- * Closes a tab
+ * Closes the tab at index
  */
 void 
-main_window_t::hide_tab(int index) 
+drgui_main_window_t::hide_tab(int index) 
 {
     tab_area->removeTab(index);
 }
 
 /* Private Slot
- * Moves view to next tab in order, loops
+ * Moves view to next tab in order, circular
  */
 void 
-main_window_t::activate_next_tab(void) 
+drgui_main_window_t::activate_next_tab(void) 
 {
     int index = tab_area->currentIndex() + 1;
     if (index == tab_area->count())
@@ -363,7 +377,7 @@ main_window_t::activate_next_tab(void)
  * Movies view to previous tab in order, loops
  */
 void 
-main_window_t::activate_previous_tab(void) 
+drgui_main_window_t::activate_previous_tab(void) 
 {
     int index = tab_area->currentIndex() - 1;
     if (index == -1)
@@ -375,7 +389,7 @@ main_window_t::activate_previous_tab(void)
  * Loads available tools
  */
 void 
-main_window_t::load_tools(void)
+drgui_main_window_t::load_tools(void)
 {
     plugins_dir = QDir(qApp->applicationDirPath());
 
@@ -390,9 +404,11 @@ main_window_t::load_tools(void)
         QPluginLoader loader(plugins_dir.absoluteFilePath(file_name), this);
         QObject *plugin = loader.instance();
         if (plugin != NULL) {
-            tool_interface_t *i_tool;
-            i_tool = qobject_cast<tool_interface_t *>(plugin);
-            if (i_tool) {
+            drgui_tool_interface_t *i_tool;
+            i_tool = qobject_cast<drgui_tool_interface_t *>(plugin);
+            if (i_tool != NULL) {
+                connect(i_tool, SIGNAL(code_editor_requested(QFile &, int)),
+                        this, SLOT(create_code_editor(QFile &, int)));
                 add_to_menu(plugin, i_tool->tool_names(), 
                             tool_menu, SLOT(add_tab()), tool_action_group);
                 plugins.append(i_tool);
@@ -409,7 +425,7 @@ main_window_t::load_tools(void)
  * Adds a tool to toolsMenu
  */
 void 
-main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
+drgui_main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
                            QMenu *menu, const char *member,
                            QActionGroup *action_group)
 {
@@ -417,7 +433,13 @@ main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
         QAction *action = new QAction(text, plugin);
         connect(action, SIGNAL(triggered()), 
                 this, member);
-        menu->addAction(action);
+
+        /* Hide code editor from tools menu
+         * it does not need to be accesible through here
+         * still needs to be handled for the options window
+         */
+        if (text.contains("Code Editor") != true)
+            menu->addAction(action);
 
         if (action_group != NULL) {
             action->setCheckable(true);
@@ -431,12 +453,56 @@ main_window_t::add_to_menu(QObject *plugin, const QStringList &texts,
  * and displays it in the tab interface
  */
 void 
-main_window_t::add_tab(void) 
+drgui_main_window_t::add_tab(void) 
 {
     QAction *action = qobject_cast<QAction *>(sender());
-    QWidget *tool = qobject_cast<tool_interface_t *>(
-                                action->parent())->create_instance();
+    QWidget *tool = qobject_cast<drgui_tool_interface_t *>(action->parent())
+                    ->create_instance();
     const QString tool_name = action->text();
 
-    tab_area->addTab(tool, tool_name);
+    tab_area->setCurrentIndex(tab_area->addTab(tool, tool_name));
+}
+
+/* Private Slot
+ * Handles creation of internal code_editor
+ * connects to external one if requested
+ */
+void
+drgui_main_window_t::create_code_editor(QFile &file, int line_num)
+{
+    qDebug().nospace() << "INFO: Entering " << __CLASS__ << __FUNCTION__;
+    foreach (drgui_tool_interface_t * i_tool, plugins) {
+        if (i_tool->tool_names().front().contains("Code Editor")) {
+            QWidget *code_editor = i_tool->create_instance();
+            i_tool->open_file(file.fileName(), line_num);
+            code_editor->show();
+            return;
+        }
+    }
+
+    /* User must cancel or provide their own option */
+    QMessageBox msg_box(this);
+    msg_box.setWindowTitle(tr("Error"));
+    msg_box.setText(tr("The Code Editor plugin was not found"));
+    msg_box.setInformativeText(tr("Would you like to configure "
+                                  "your own editor?"));
+    msg_box.setStandardButtons(QMessageBox::Yes | QMessageBox::No | 
+                               QMessageBox::Cancel);
+    msg_box.setDefaultButton(QMessageBox::Yes);
+    int ret = msg_box.exec();
+    /* get command from user */
+    /* TODO: make list of known editor commands */
+    if (ret == QMessageBox::Yes) {
+        QInputDialog editor_box(this);
+        editor_box.setInputMode(QInputDialog::TextInput);
+        editor_box.setWindowTitle(tr("Custom Code Editor"));
+        editor_box.setLabelText(tr("Launch Command Format<br> e.g. '/path/to/"
+                                   "sublime-text file:line_num"));
+        ret = editor_box.exec();
+        QString command_format = editor_box.textValue();
+        if (ret == QMessageBox::Yes) {
+            custom_command_format = command_format;
+        }
+    }
+
 }

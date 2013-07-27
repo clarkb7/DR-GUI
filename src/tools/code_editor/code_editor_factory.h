@@ -6,31 +6,31 @@
 ** modification, are permitted provided that the conditions outlined in
 ** the COPYRIGHT file are met:
 ** 
-** File: dr_heap_factory.h
+** File: code_editor_factory.h
 ** 
-** Defines the DR. Heapstat factory
+** Defines the code_editor factory
 **
 *************************************************************************/
 
-#ifndef DR_HEAP_FACTORY_H
-#define DR_HEAP_FACTORY_H
+#ifndef CODE_EDITOR_FACTORY_H
+#define CODE_EDITOR_FACTORY_H
 
-#include "tools/toolbase.h"
+#include "tools/drgui_tool_interface.h"
 
-class dr_heapstat_t;
-class dr_heapstat_options_t;
+class code_editor_win_t;
+class code_editor_options_page_t;
 struct options_t;
 
-class dr_heapstat_factory_t : public tool_interface_t 
+class code_editor_factory_t : public drgui_tool_interface_t 
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID ToolInterface_iid FILE "DR_Heapstat.json")
-    Q_INTERFACES(tool_interface_t)
+    Q_PLUGIN_METADATA(IID DrGUI_ToolInterface_iid FILE "code_editor.json")
+    Q_INTERFACES(drgui_tool_interface_t)
 
 public:
-    dr_heapstat_factory_t(void);
+    code_editor_factory_t(void);
 
-    ~dr_heapstat_factory_t(void);
+    ~code_editor_factory_t(void);
 
     QStringList 
     tool_names(void) const;
@@ -38,8 +38,11 @@ public:
     QWidget *
     create_instance(void);
 
-    options_interface_t *
+    drgui_options_interface_t *
     create_options_page(void);
+
+    void
+    open_file(const QString &path, int line_num);
 
 public slots:
     void
@@ -47,10 +50,10 @@ public slots:
 
 private:
     /* GUI */
-    QVector<dr_heapstat_t *> tool_instances;
+    QVector<code_editor_win_t *> tool_instances;
 
     /* Options */
-    dr_heapstat_options_t *options_page;
+    code_editor_options_page_t *options_page;
     options_t *options;
 };
 

@@ -6,21 +6,18 @@
 ** modification, are permitted provided that the conditions outlined in
 ** the COPYRIGHT file are met:
 ** 
-** File: main.cpp
+** File: code_editor_structures.h
 ** 
-** Starts the app
+** Defines the structures used by code_editor
 **
-**************************************************************************/
+*************************************************************************/
 
-#include <QApplication>
+#ifndef CODE_EDITOR_STRUCTURES_H
+#define CODE_EDITOR_STRUCTURES_H
 
-#include "drgui_main_window.h"
+struct options_t {
+    QPoint pos;
+    QSize size;
+};
 
-int 
-main(int argc, char *argv[])
-{
-    QApplication app(argc, argv);
-    drgui_main_window_t main_win;
-    main_win.show();
-    return app.exec();
-}
+#endif
