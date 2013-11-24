@@ -1,42 +1,23 @@
-Copyright (c) 2013, Branden Clark  
-All rights reserved.
-
-=================         IMPORTANT         =================
-
-See COPYRIGHT for license details.
-
+=================         Important       =================
+This project has been integrated into the DynamoRIO and
+DrMemory Projects.
+See:
+https://code.google.com/p/dynamorio/
+https://code.google.com/p/drmemory/
 
 =================         Purpose         =================
 
 To provide a GUI for Dynamorio and its extensions.  
 Currently in progress:  
-* Dr. Memory  
 * Dr. Heapstat  
 
+=================        Building         =================
 
-=================         Building         =================
+Please see 
+https://code.google.com/p/dynamorio/wiki/HowToBuild#Building_the_Qt_DrGUI_extension
 
-* download the source  
-* create a build directory (in or out of source)  
-* build the plugins you want (from the build dir)  
-  + located in src/tools  
-  + qmake PATH_TO_/SOME_TOOL.pro  
-  + make  
-  + the plugins will automatically be placed in BUILD_DIR/tools  
-* build the mainWindow  
-  + qmake PATH_TO_/DR-GUI.pro  
-  + make  
-* run the program  
-  + ./DR-GUI  
+=================          USING          =================
 
-=================         USING         =================
-
-To load a tool look in the 'tools' menu.  
-For information on a specific tool check their docs.  
-
-
-=================         FAQ         =================
-
-How do I make my own plugin?  
-* Read the documentation (soon!)  
+See the relevant documentation at 
+http://dynamorio.org/docs/index.html
 
